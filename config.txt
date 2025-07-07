@@ -1,0 +1,44 @@
+//Note: the program only skips line that start with the C comment symbol. So, no inline comment. MOREOVER, SPACES ON THE LEFT OF THE = SIGN ARE IMPORTANT
+
+// Scaling Parameter
+
+N=80
+
+// Macroscopic time 
+T= 4
+
+// Macroscopic Dimension of the torus 
+
+L=4
+
+// Resolution: How many intervals to plot for each unit of Macroscopic time 
+
+resolution= 100
+
+// Number of subintervals in which to divide the Microscopic unit interval. Since for each unit of macroscopic time there are N*N microscopic units of time, each of the macroscopic intervals of length 1/resolution contains (Micro_n_steps)* (N*N)/resolution, and in the program we assume that it is an integer  
+
+Micro_n_steps= 20
+
+// Number of simulations to be made to compute the statistic 
+ 
+N_simulations= 40
+
+// Macroscopc interval where to compute the average magnetization 
+
+A1_magnetization= 2 
+B1_magnetization= 3 
+
+// Macroscopc interval where to compute the average magnetization 
+
+A1_corr= 2
+A2_corr= 2
+B1_corr= 3
+B2_corr= 3
+
+// Macroscopc interval where to compute the average magnetization 
+
+A1_time_delayed_corr= 2
+A2_time_delayed_corr= 2 
+B1_time_delayed_corr= 3
+B2_time_delayed_corr= 3 
+
