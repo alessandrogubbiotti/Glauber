@@ -1,0 +1,51 @@
+# Data files
+*.csv
+*.bin
+
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+*.bak
+
+# Compiled object files
+*.o
+*.obj
+
+# Static and dynamic libraries
+*.a
+*.so
+*.dll
+*.dylib
+*.lib
+
+# Executables
+*.exe
+*.out
+*.elf
+*.app
+a.out
+
+# Core dumps / debugging
+core
+*.core
+*.dSYM/
+
+# Build directories
+/build/
+/dist/
+/target/
+/Debug/
+/Release/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# IDE-specific (optional, uncomment if you use one)
+#.vscode/
+#.idea/
+
