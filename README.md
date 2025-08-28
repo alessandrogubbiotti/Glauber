@@ -3,7 +3,7 @@
 This repository explores the **zero-temperature continuum limit** of the **1-dimensional Glauber dynamics**.  
 The model considers sites spaced by  $1/N$ with
 
-![equation](https://latex.codecogs.com/svg.latex?\dpi{150}\color{white}N%20=%20\frac{e^{2\beta}}{1%20-%20e^{-\beta}},) 
+![equation](https://latex.codecogs.com/svg.latex?\dpi{150}\color{white}N%20=%20\frac{e^{2\beta}}{1%20-%20e^{\beta}},) 
 
 and time is **diffusively rescaled**.
 
