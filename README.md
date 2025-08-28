@@ -18,19 +18,19 @@ The dynamics can be described in terms of **interfaces (particles):**
   ![equation](https://latex.codecogs.com/svg.latex?\dpi{150}\color{white}\large%201),  
   provided no other interface is present.
 
-  ![diffusion image](images/diffusion.png)
+  ![diffusion image](docs/images/diffusion.png)
 
 - **Annihilation of neighboring particles:**  
   Two neighboring particles are annihilated with rate  
   ![equation](https://latex.codecogs.com/svg.latex?\dpi{150}\color{white}\large%202%20-%20\frac{1}{N^a}).
 
-  ![annihilation image](images/annihilation.png)
+  ![annihilation image](docs/images/annihilation.png)
 
 - **Creation of particles:**  
   At each site, two particles are created with rate  
   ![equation](https://latex.codecogs.com/svg.latex?\dpi{150}\color{white}\large%20\frac{1}{N^a}).
 
-  ![creation image](images/creation.png)
+  ![creation image](docs/images/creation.png)
 
 ---
 
@@ -43,7 +43,7 @@ The invariant measure is that of a **Poisson point process** of intensity one:
 
 Example simulation output:
 
-![simulation image](images/simulation_32.png)
+![simulation image](docs/images/simulation_32.png)
 
 ---
 
