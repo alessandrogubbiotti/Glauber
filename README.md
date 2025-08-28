@@ -1,10 +1,10 @@
 # Glauber Dynamics in the Zero-Temperature Continuum Limit
 
 This repository explores the **zero-temperature continuum limit** of the **1-dimensional Glauber dynamics**.  
-The model considers sites spaced by  
-![equation](https://latex.codecogs.com/svg.latex?\dpi{150}\color{white}\large\frac{1}{N})  
-with
-![equation](https://latex.codecogs.com/svg.latex?\dpi{150}\color{white}\largeN%20=%20\frac{e^{2\beta}}{1%20-%20e^{-\beta}},) 
+The model considers sites spaced by  $1/N$ with
+
+![equation](https://latex.codecogs.com/svg.latex?\dpi{150}\color{white}N%20=%20\frac{e^{2\beta}}{1%20-%20e^{-\beta}},) 
+
 and time is **diffusively rescaled**.
 
 ---
@@ -27,7 +27,7 @@ The dynamics can be described in terms of **interfaces (particles):**
   ![annihilation image](docs/images/annihilation.png)
 
 - **Creation of particles:**  
-  At each site, two particles are created with rate  
+  At each site, two particles are created with rate 
   ![equation](https://latex.codecogs.com/svg.latex?\dpi{150}\color{white}\large%20\frac{1}{N^a}).
 
   ![creation image](docs/images/creation.png)
