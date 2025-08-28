@@ -49,5 +49,5 @@ Example simulation output:
 
 ## 🔹 Pages
 
-For a rendered version of the project documentation, see the [📄 GitHub Pages site]([./pages/index.md](https://alessandrogubbiotti.github.io/Glauber/)).
+For a rendered version of the project documentation, see the [📄 GitHub Pages site](https://alessandrogubbiotti.github.io/Glauber/:).
 
