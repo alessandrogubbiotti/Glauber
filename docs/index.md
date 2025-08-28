@@ -4,6 +4,9 @@ title:  Glauber Dynamics in the Zero-Temperature Continuum Limit
 
 ---
 
+# Glauber Dynamics in the Zero-Temperature Continuum Limit
+
+
 This repository explores the **zero-temperature continuum limit** of the **1-dimensional Glauber dynamics**.  
 The model considers sites spaced by  
 \[
@@ -28,7 +31,7 @@ The dynamics can be described in terms of **interfaces (particles):**
   \]  
   provided no other interface is present.
 
-  ![diffusion image](../images/diffusion.png)
+  ![diffusion image](images/diffusion.png)
 
 - **Annihilation of neighboring particles:**  
   Two neighboring particles are annihilated with rate
@@ -36,7 +39,7 @@ The dynamics can be described in terms of **interfaces (particles):**
   2 - \frac{1}{N^a}.
   \]
 
-  ![annihilation image](../images/annihilation.png)
+  ![annihilation image](images/annihilation.png)
 
 - **Creation of particles:**  
   At each site, two particles are created with rate
@@ -44,7 +47,7 @@ The dynamics can be described in terms of **interfaces (particles):**
   \frac{1}{N^a}.
   \]
 
-  ![creation image](../images/creation.png)
+  ![creation image](images/creation.png)
 
 ---
 
@@ -57,7 +60,7 @@ The invariant measure is that of a **Poisson point process** of intensity one:
 
 Example simulation output:
 
-![simulation image](../images/simulation_32.png)
+![simulation image](images/simulation_32.png)
 
 ---
 
