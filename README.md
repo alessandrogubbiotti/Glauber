@@ -8,6 +8,9 @@ The model considers sites spaced by  $1/N$ with
 and time is **diffusively rescaled**.
 
 ---
+## 🔹 Pages
+
+For a rendered version of the project documentation, see the [📄 GitHub Pages site](https://alessandrogubbiotti.github.io/Glauber/).
 
 ## 🔹 Description of the Dynamics
 
@@ -47,7 +50,4 @@ Example simulation output:
 
 ---
 
-## 🔹 Pages
-
-For a rendered version of the project documentation, see the [📄 GitHub Pages site](https://alessandrogubbiotti.github.io/Glauber/:).
 
