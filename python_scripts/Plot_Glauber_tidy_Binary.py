@@ -89,8 +89,8 @@ def main():
     N = config["N"]
     L = config["L"]
     Micro_n_steps = config["Micro_n_steps"]
-    creation = config["Micro_Creation_Rate"]
-    annihilation = config["Micro_Annihilation_Rate"]
+    creation = config.get("creation", config.get("Micro_Creation_Rate"))
+    annihilation = config.get("annihilation", config.get("Micro_Annihilation_Rate"))
     resolution = config["resolution"]
 
     l = N * L
