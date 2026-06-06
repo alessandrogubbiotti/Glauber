@@ -1,0 +1,514 @@
+#include "interface_state.h"
+
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <gsl/gsl_randist.h>
+
+#define INF 1e300
+
+/* =========================================================================
+ * Internal helpers — not exposed in the header.
+ * ========================================================================= */
+
+static inline int domain_width(const InterfaceState *s, int j)
+{
+    int next = (j + 1) % s->k;
+    return (s->ifaces[next].pos - s->ifaces[j].pos + s->l) % s->l;
+}
+
+/* Rate of the domain-level event for domain j. */
+static inline double domain_rate(int w, double ann_rate)
+{
+    if (w == 1) return ann_rate;
+    if (w >= 2) return 2.0;
+    return 0.0; /* w==0: impossible during a valid run */
+}
+
+/* Bulk spins contributed by a domain of width w. */
+static inline int bulk_of(int w)
+{
+    return (w >= 3) ? w - 2 : 0;
+}
+
+/* Sample a fresh absolute event time for domain j from the current micro_time. */
+static double sample_domain_tau(InterfaceState *s, int j)
+{
+    int w    = domain_width(s, j);
+    double r = domain_rate(w, s->ann_rate);
+    if (r <= 0.0) return INF;
+    return s->micro_time + gsl_ran_exponential(s->rng, 1.0 / r);
+}
+
+/* Sample a fresh absolute creation time. */
+static double sample_create_tau(InterfaceState *s)
+{
+    double r = (double)s->n_bulk * s->create_rate;
+    if (r <= 0.0) return INF;
+    return s->micro_time + gsl_ran_exponential(s->rng, 1.0 / r);
+}
+
+/* Rescale an existing absolute event time when the underlying rate changes.
+ * Uses the NRM memoryless property:
+ *   remaining_new = remaining_old * old_rate / new_rate
+ * If old_rate == 0 (event didn't exist), sample fresh.
+ * If new_rate == 0, the event no longer exists: return INF. */
+static double rescale_tau(double old_tau, double old_rate,
+                          double new_rate, double t_now)
+{
+    if (new_rate <= 0.0) return INF;
+    if (old_rate <= 0.0 || old_tau >= INF)
+        /* Event was absent; we'd need a fresh sample, but caller handles this. */
+        return INF; /* caller should sample fresh */
+    double remaining_new = (old_tau - t_now) * old_rate / new_rate;
+    return t_now + remaining_new;
+}
+
+/* Adjust n_bulk and return the delta for update_create_tau purposes. */
+static int update_n_bulk(InterfaceState *s, int old_w, int new_w)
+{
+    int delta = bulk_of(new_w) - bulk_of(old_w);
+    s->n_bulk += delta;
+    return delta;
+}
+
+/* After n_bulk has changed, rescale or resample create_tau.
+ * old_create_rate: the rate before the change (= old_n_bulk * create_rate). */
+static void update_create_tau(InterfaceState *s, double old_create_rate)
+{
+    double new_create_rate = (double)s->n_bulk * s->create_rate;
+    if (old_create_rate <= 0.0 || s->create_tau >= INF)
+        s->create_tau = sample_create_tau(s);
+    else
+        s->create_tau = rescale_tau(s->create_tau, old_create_rate,
+                                    new_create_rate, s->micro_time);
+}
+
+/* =========================================================================
+ * Insert / remove interfaces (maintain sorted order, shift array).
+ * Caller updates domain_tau, n_bulk, etc. afterwards.
+ * ========================================================================= */
+
+/* Insert a new interface at bond position pos with given left_color.
+ * Returns the index where it was inserted. */
+static int insert_interface(InterfaceState *s, int pos, int left_color)
+{
+    /* Grow array if needed. */
+    if (s->k == s->k_alloc) {
+        s->k_alloc = s->k_alloc ? s->k_alloc * 2 : 4;
+        s->ifaces     = realloc(s->ifaces,     s->k_alloc * sizeof(Interface));
+        s->domain_tau = realloc(s->domain_tau, s->k_alloc * sizeof(double));
+        if (!s->ifaces || !s->domain_tau) {
+            perror("insert_interface: realloc failed");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    /* Find insertion index (sorted by pos). */
+    int idx = 0;
+    while (idx < s->k && s->ifaces[idx].pos < pos) idx++;
+
+    /* Shift right. */
+    memmove(&s->ifaces[idx + 1],     &s->ifaces[idx],
+            (s->k - idx) * sizeof(Interface));
+    memmove(&s->domain_tau[idx + 1], &s->domain_tau[idx],
+            (s->k - idx) * sizeof(double));
+
+    s->ifaces[idx].pos        = pos;
+    s->ifaces[idx].left_color = left_color;
+    s->domain_tau[idx]        = INF; /* caller must set this */
+    s->k++;
+    return idx;
+}
+
+/* Remove the interface at index j. */
+static void remove_interface(InterfaceState *s, int j)
+{
+    assert(j >= 0 && j < s->k);
+    memmove(&s->ifaces[j],     &s->ifaces[j + 1],
+            (s->k - j - 1) * sizeof(Interface));
+    memmove(&s->domain_tau[j], &s->domain_tau[j + 1],
+            (s->k - j - 1) * sizeof(double));
+    s->k--;
+}
+
+/* =========================================================================
+ * Invariant checker (enabled in debug builds).
+ * ========================================================================= */
+
+#ifndef NDEBUG
+static void assert_invariants(const InterfaceState *s)
+{
+    assert(s->k % 2 == 0); /* torus: must be even */
+
+    /* k==0: all sites are bulk. */
+    if (s->k == 0) {
+        assert(s->n_bulk == s->l);
+        return;
+    }
+
+    int nb = 0;
+    for (int j = 0; j < s->k; j++) {
+        int next = (j + 1) % s->k;
+        assert(s->ifaces[next].left_color == -s->ifaces[j].left_color);
+        nb += bulk_of(domain_width(s, j));
+    }
+    assert(s->n_bulk == nb);
+}
+#else
+static inline void assert_invariants(const InterfaceState *s) { (void)s; }
+#endif
+
+/* =========================================================================
+ * Public: istate_alloc
+ * ========================================================================= */
+
+InterfaceState *istate_alloc(const int *spins, int l, int N,
+                             double ann_rate, double create_rate,
+                             unsigned long seed)
+{
+    InterfaceState *s = malloc(sizeof(InterfaceState));
+    if (!s) { perror("istate_alloc"); exit(EXIT_FAILURE); }
+
+    s->l           = l;
+    s->N           = N;
+    s->ann_rate    = ann_rate;
+    s->create_rate = create_rate;
+    s->micro_time  = 0.0;
+    s->k           = 0;
+    s->k_alloc     = 0;
+    s->n_bulk      = 0;
+    s->n_events    = 0;
+    s->ifaces      = NULL;
+    s->domain_tau  = NULL;
+    s->create_tau  = INF;
+
+    s->rng = gsl_rng_alloc(gsl_rng_mt19937);
+    gsl_rng_set(s->rng, seed);
+
+    /* Scan spins left to right; detect interfaces at bonds. */
+    for (int i = 0; i < l; i++) {
+        if (spins[i] != spins[(i + 1) % l]) {
+            int idx = insert_interface(s, i, spins[i]);
+            s->domain_tau[idx] = INF; /* will be set below */
+        }
+    }
+
+    if (s->k % 2 != 0) {
+        fprintf(stderr, "istate_alloc: odd number of interfaces (%d) on torus\n",
+                s->k);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Compute n_bulk and initial domain_tau. */
+    s->n_bulk = 0;
+    for (int j = 0; j < s->k; j++) {
+        s->n_bulk += bulk_of(domain_width(s, j));
+        s->domain_tau[j] = sample_domain_tau(s, j);
+    }
+
+    /* Handle k==0: entire torus is one domain. */
+    if (s->k == 0) {
+        /* No domain events; only global creation (all l sites are bulk). */
+        s->n_bulk = l; /* all sites are bulk when there are no interfaces */
+    }
+
+    s->create_tau = sample_create_tau(s);
+
+    assert_invariants(s);
+    return s;
+}
+
+/* =========================================================================
+ * Public: istate_free
+ * ========================================================================= */
+
+void istate_free(InterfaceState *s)
+{
+    gsl_rng_free(s->rng);
+    free(s->ifaces);
+    free(s->domain_tau);
+    free(s);
+}
+
+/* =========================================================================
+ * Public: istate_to_spins
+ * ========================================================================= */
+
+void istate_to_spins(const InterfaceState *s, int *spins_out)
+{
+    if (s->k == 0) {
+        /* Uniform state. Color is undefined (or we can use +1 as default). */
+        for (int i = 0; i < s->l; i++) spins_out[i] = 1;
+        return;
+    }
+
+    /* Fill domains left to right starting from interface 0.
+     * Domain j occupies sites ifaces[j].pos+1 .. ifaces[(j+1)%k].pos (wrapping). */
+    for (int j = 0; j < s->k; j++) {
+        int color = s->ifaces[j].left_color; /* color to the RIGHT of interface j is -left_color */
+        int right_color = -color;            /* domain j is to the RIGHT of interface j */
+
+        int start = (s->ifaces[j].pos + 1) % s->l;
+        int end   = s->ifaces[(j + 1) % s->k].pos; /* bond position of next interface */
+
+        /* end is the LAST site of domain j (the site to the left of the next interface bond).
+         * Sites: start, start+1, ..., end (wrapping on torus). */
+        int site = start;
+        while (1) {
+            spins_out[site] = right_color;
+            if (site == end) break;
+            site = (site + 1) % s->l;
+        }
+    }
+}
+
+/* =========================================================================
+ * Event execution helpers (static)
+ * ========================================================================= */
+
+/* Reinsert interface at index j after its pos changed and may have violated
+ * sorted order.  Handles the wraparound case (bond l-1 → 0 or 0 → l-1).
+ * Returns the new index of the interface. */
+static int reinsert_sorted(InterfaceState *s, int j)
+{
+    Interface iface = s->ifaces[j];
+    /* Remove (shifts subsequent elements left, decrements k). */
+    memmove(&s->ifaces[j],     &s->ifaces[j + 1],
+            (s->k - j - 1) * sizeof(Interface));
+    memmove(&s->domain_tau[j], &s->domain_tau[j + 1],
+            (s->k - j - 1) * sizeof(double));
+    s->k--;
+    /* Insert at the correct sorted position (increments k, sets tau=INF). */
+    return insert_interface(s, iface.pos, iface.left_color);
+}
+
+/* Recompute n_bulk and all domain_tau from scratch (O(k)).
+ * Used after wraparound movements where the full state changes. */
+static void recompute_all(InterfaceState *s, double old_create_rate)
+{
+    s->n_bulk = 0;
+    for (int jj = 0; jj < s->k; jj++) {
+        s->n_bulk       += bulk_of(domain_width(s, jj));
+        s->domain_tau[jj] = sample_domain_tau(s, jj);
+    }
+    update_create_tau(s, old_create_rate);
+}
+
+/* execute_movement: domain j fires with w_j >= 2.
+ * Direction 0: left interface (j) moves right — domain j shrinks from the left.
+ * Direction 1: right interface (j+1)%k moves left — domain j shrinks from the right. */
+static void execute_movement(InterfaceState *s, int j)
+{
+    int dir = (gsl_rng_uniform(s->rng) < 0.5) ? 0 : 1;
+    double old_create_rate = (double)s->n_bulk * s->create_rate;
+
+    if (dir == 0) {
+        /* Interface j moves RIGHT. */
+        int jleft   = (j - 1 + s->k) % s->k;
+        int old_wj  = domain_width(s, j);
+        int old_wl  = domain_width(s, jleft);
+        int old_pos = s->ifaces[j].pos;
+        int new_pos = (old_pos + 1) % s->l;
+        s->ifaces[j].pos = new_pos;
+
+        if (new_pos < old_pos) {
+            /* Wraparound: bond l-1 → 0. Re-sort and recompute everything. */
+            reinsert_sorted(s, j);
+            recompute_all(s, old_create_rate);
+        } else {
+            int new_wj = old_wj - 1;
+            int new_wl = old_wl + 1;
+            update_n_bulk(s, old_wj, new_wj);
+            update_n_bulk(s, old_wl, new_wl);
+            update_create_tau(s, old_create_rate);
+            s->domain_tau[j] = sample_domain_tau(s, j);
+            if (domain_rate(old_wl, s->ann_rate) != domain_rate(new_wl, s->ann_rate))
+                s->domain_tau[jleft] = sample_domain_tau(s, jleft);
+        }
+
+    } else {
+        /* Interface jright = (j+1)%k moves LEFT. */
+        int jright  = (j + 1) % s->k;
+        int old_wj  = domain_width(s, j);
+        int old_wr  = domain_width(s, jright);
+        int old_pos = s->ifaces[jright].pos;
+        int new_pos = (old_pos - 1 + s->l) % s->l;
+        s->ifaces[jright].pos = new_pos;
+
+        if (new_pos > old_pos) {
+            /* Wraparound: bond 0 → l-1. Re-sort and recompute everything. */
+            reinsert_sorted(s, jright);
+            recompute_all(s, old_create_rate);
+        } else {
+            int new_wj = old_wj - 1;
+            int new_wr = old_wr + 1;
+            update_n_bulk(s, old_wj, new_wj);
+            update_n_bulk(s, old_wr, new_wr);
+            update_create_tau(s, old_create_rate);
+            s->domain_tau[j] = sample_domain_tau(s, j);
+            if (domain_rate(old_wr, s->ann_rate) != domain_rate(new_wr, s->ann_rate))
+                s->domain_tau[jright] = sample_domain_tau(s, jright);
+        }
+    }
+}
+
+/* execute_annihilation: domain j fires with w_j == 1.
+ * Interfaces j and (j+1)%k are removed; surrounding domains merge. */
+static void execute_annihilation(InterfaceState *s, int j)
+{
+    assert(s->k >= 2);
+    assert(domain_width(s, j) == 1);
+
+    double old_create_rate = (double)s->n_bulk * s->create_rate;
+
+    /* k==2: both interfaces disappear entirely — the entire torus becomes bulk. */
+    if (s->k == 2) {
+        s->n_bulk = s->l;
+        remove_interface(s, 1);
+        remove_interface(s, 0);
+        /* k is now 0; no domain events remain. */
+        update_create_tau(s, old_create_rate);
+        return;
+    }
+
+    /* General case: k >= 4.
+     * jleft is the domain to the LEFT  of the width-1 domain j.
+     * jnext is the domain to the RIGHT of the width-1 domain j.
+     * jleft != jnext because k >= 4. */
+    int jnext = (j + 1) % s->k;
+    int jleft = (j - 1 + s->k) % s->k;
+
+    int w_left  = domain_width(s, jleft);
+    int w_right = domain_width(s, jnext);
+    int w_new   = w_left + 1 + w_right;
+
+    update_n_bulk(s, w_left,  0);
+    update_n_bulk(s, 1,       0); /* the width-1 domain */
+    update_n_bulk(s, w_right, 0);
+    update_n_bulk(s, 0,    w_new);
+
+    /* Remove the two interfaces: higher index first. */
+    int hi = (j > jnext) ? j : jnext;
+    int lo = (j < jnext) ? j : jnext;
+    remove_interface(s, hi);
+    remove_interface(s, lo);
+    /* s->k is now k-2. */
+
+    /* After the two removals, the merged domain is to the right of the interface
+     * that was at index lo-1 (before removal).  In the new array:
+     *   lo > 0  → merged domain index = lo - 1
+     *   lo == 0 → merged domain is the wrap-around domain = new s->k - 1  */
+    int j_merged = (lo == 0) ? (s->k - 1) : (lo - 1);
+    s->domain_tau[j_merged] = sample_domain_tau(s, j_merged);
+
+    update_create_tau(s, old_create_rate);
+}
+
+/* execute_creation: global creation event fires.
+ * Pick a bulk spin uniformly, insert two new interfaces.
+ * After insertion all domain taus are recomputed from scratch — this is O(k)
+ * but creation events are rare (rate ~ creation per bulk spin), so it is fine. */
+static void execute_creation(InterfaceState *s)
+{
+    assert(s->n_bulk > 0);
+
+    /* Select bulk spin index u in [0, n_bulk). */
+    int u = (int)(gsl_rng_uniform(s->rng) * s->n_bulk);
+    if (u >= s->n_bulk) u = s->n_bulk - 1; /* clamp floating-point edge */
+
+    int p_left, p_right, domain_color;
+
+    if (s->k == 0) {
+        /* All l sites are bulk; pick any site. */
+        p_right      = u % s->l;
+        p_left       = (p_right - 1 + s->l) % s->l;
+        domain_color = 1; /* istate_to_spins returns +1 for uniform state */
+    } else {
+        /* Find which domain contains the u-th bulk spin. */
+        int chosen_j = -1, local_idx = -1;
+        for (int j = 0; j < s->k; j++) {
+            int b = bulk_of(domain_width(s, j));
+            if (u < b) { chosen_j = j; local_idx = u; break; }
+            u -= b;
+        }
+        assert(chosen_j >= 0);
+
+        /* The bulk spin is at position:
+         *   (pos[chosen_j] + 1 + local_idx + 1) % l
+         * = (pos[chosen_j] + local_idx + 2) % l
+         * New interfaces at bonds p_left = pos+local_idx+1 and p_right = pos+local_idx+2. */
+        p_left       = (s->ifaces[chosen_j].pos + local_idx + 1) % s->l;
+        p_right      = (s->ifaces[chosen_j].pos + local_idx + 2) % s->l;
+        domain_color = -(s->ifaces[chosen_j].left_color); /* color of domain chosen_j */
+    }
+
+    /* Insert the two new interfaces (insert_interface keeps sorted order). */
+    insert_interface(s, p_left,  domain_color);
+    insert_interface(s, p_right, -domain_color);
+    /* k is now k+2. */
+
+    /* Recompute n_bulk and all domain taus from scratch. */
+    s->n_bulk = 0;
+    for (int j = 0; j < s->k; j++) {
+        s->n_bulk       += bulk_of(domain_width(s, j));
+        s->domain_tau[j] = sample_domain_tau(s, j);
+    }
+    s->create_tau = sample_create_tau(s);
+}
+
+/* =========================================================================
+ * Public: istate_advance_to
+ * ========================================================================= */
+
+void istate_advance_to(InterfaceState *s, double target_macro_time)
+{
+    double target_micro = target_macro_time * (double)s->N * (double)s->N;
+
+    while (s->micro_time < target_micro) {
+
+        /* Find the minimum event time across all domain events and creation. */
+        int    best_j   = -1;   /* -1 means creation event */
+        double best_tau = s->create_tau;
+
+        for (int j = 0; j < s->k; j++) {
+            if (s->domain_tau[j] < best_tau) {
+                best_tau = s->domain_tau[j];
+                best_j   = j;
+            }
+        }
+
+        /* If no event exists (all INF), time cannot advance — absorbing state. */
+        if (best_tau >= INF) {
+            s->micro_time = target_micro;
+            return;
+        }
+
+        /* Event falls after the snapshot — do not execute; clamp time. */
+        if (best_tau > target_micro) {
+            s->micro_time = target_micro;
+            return;
+        }
+
+        /* Advance time to this event. */
+        s->micro_time = best_tau;
+        s->n_events++;
+
+        if (best_j < 0) {
+            /* Global creation event. */
+            s->create_tau = INF; /* consumed; will be resampled in execute_creation */
+            execute_creation(s);
+        } else {
+            int w = domain_width(s, best_j);
+            s->domain_tau[best_j] = INF; /* consumed */
+            if (w == 1)
+                execute_annihilation(s, best_j);
+            else
+                execute_movement(s, best_j);
+        }
+
+        assert_invariants(s);
+    }
+}
