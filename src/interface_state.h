@@ -35,6 +35,7 @@ typedef struct {
     double     ann_rate;  /* annihilation rate per width-1 domain        */
     double     create_rate; /* creation rate per bulk spin               */
     int        n_bulk;    /* sum_j max(0, w_j - 2)                       */
+    int        uniform_color; /* spin color of the ring when k == 0      */
     double     micro_time;  /* accumulated microscopic time              */
     gsl_rng   *rng;
 
