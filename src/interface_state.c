@@ -184,6 +184,7 @@ InterfaceState *istate_alloc(const int *spins, int l, int N,
     s->ifaces      = NULL;
     s->domain_tau  = NULL;
     s->create_tau  = INF;
+    s->uniform_color = spins[0]; /* exact when k==0; harmless default else */
 
     s->rng = gsl_rng_alloc(gsl_rng_mt19937);
     gsl_rng_set(s->rng, seed);
@@ -240,8 +241,11 @@ void istate_free(InterfaceState *s)
 void istate_to_spins(const InterfaceState *s, int *spins_out)
 {
     if (s->k == 0) {
-        /* Uniform state. Color is undefined (or we can use +1 as default). */
-        for (int i = 0; i < s->l; i++) spins_out[i] = 1;
+        /* Uniform state: use the color recorded when the last interface
+         * pair annihilated (or at initialisation).  Forcing +1 here would
+         * silently flip the sign of every cross-time spin product in
+         * realisations that pass through k == 0. */
+        for (int i = 0; i < s->l; i++) spins_out[i] = s->uniform_color;
         return;
     }
 
@@ -364,8 +368,11 @@ static void execute_annihilation(InterfaceState *s, int j)
 
     double old_create_rate = (double)s->n_bulk * s->create_rate;
 
-    /* k==2: both interfaces disappear entirely — the entire torus becomes bulk. */
+    /* k==2: both interfaces disappear entirely — the entire torus becomes bulk.
+     * The surviving color is that of the surrounding domain, i.e. the color
+     * to the LEFT of interface j (the width-1 domain itself has -left_color). */
     if (s->k == 2) {
+        s->uniform_color = s->ifaces[j].left_color;
         s->n_bulk = s->l;
         remove_interface(s, 1);
         remove_interface(s, 0);
@@ -425,7 +432,7 @@ static void execute_creation(InterfaceState *s)
         /* All l sites are bulk; pick any site. */
         p_right      = u % s->l;
         p_left       = (p_right - 1 + s->l) % s->l;
-        domain_color = 1; /* istate_to_spins returns +1 for uniform state */
+        domain_color = s->uniform_color; /* color of the uniform background */
     } else {
         /* Find which domain contains the u-th bulk spin. */
         int chosen_j = -1, local_idx = -1;

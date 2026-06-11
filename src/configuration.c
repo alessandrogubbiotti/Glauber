@@ -73,6 +73,7 @@ int set_init_function(ModelConfig *conf, const char *value) {
         case 3: conf->initialize = initialize_spins_3; break;
         case 4: conf->initialize = initialize_spins_4; break;
         case 5: conf->initialize = initialize_spins_5; break;
+        case 6: conf->initialize = initialize_spins_6; break;
         default: return -1;
     }
     return 0;

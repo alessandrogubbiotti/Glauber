@@ -26,13 +26,16 @@ typedef struct {
     const char *key;
     ModelConfigSetter setter;
 } ModelConfigEntry;
-
+/* Function names automatically decay to function pointers.
+ * Equivalent to: conf->initialize = &initialize_spins_5;
+ */
 // Forward declarations for initialization functions defined in Glauber_tidy.c
 void initialize_spins_1(int *spins, int l, void *params);
 void initialize_spins_2(int *spins, int l, void *params);
 void initialize_spins_3(int *spins, int l, void *params);
 void initialize_spins_4(int *spins, int l, void *params);
 void initialize_spins_5(int *spins, int l, void *params);
+void initialize_spins_6(int *spins, int l, void *params);
 
 // Setters
 int set_N(ModelConfig *conf, const char *value);
