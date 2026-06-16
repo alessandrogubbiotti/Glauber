@@ -33,6 +33,12 @@ static inline int bulk_of(int w)
     return (w >= 3) ? w - 2 : 0;
 }
 
+/* Record that the spin at site i flipped (no-op unless tracking enabled). */
+static inline void mark_flip(InterfaceState *s, int i)
+{
+    if (s->flipped) s->flipped[i] = 1;
+}
+
 /* Sample a fresh absolute event time for domain j from the current micro_time. */
 static double sample_domain_tau(InterfaceState *s, int j)
 {
@@ -184,6 +190,7 @@ InterfaceState *istate_alloc(const int *spins, int l, int N,
     s->ifaces      = NULL;
     s->domain_tau  = NULL;
     s->create_tau  = INF;
+    s->flipped     = NULL;   /* tracking off unless istate_track_flips() */
     s->uniform_color = spins[0]; /* exact when k==0; harmless default else */
 
     s->rng = gsl_rng_alloc(gsl_rng_mt19937);
@@ -231,7 +238,28 @@ void istate_free(InterfaceState *s)
     gsl_rng_free(s->rng);
     free(s->ifaces);
     free(s->domain_tau);
+    free(s->flipped);
     free(s);
+}
+
+/* =========================================================================
+ * Public: per-site flip tracking (persistence observable)
+ * ========================================================================= */
+
+void istate_track_flips(InterfaceState *s)
+{
+    free(s->flipped);
+    s->flipped = calloc((size_t)s->l, sizeof(unsigned char));
+    if (!s->flipped) { perror("istate_track_flips"); exit(EXIT_FAILURE); }
+}
+
+double istate_never_flipped_fraction(const InterfaceState *s)
+{
+    assert(s->flipped);
+    long n = 0;
+    for (int i = 0; i < s->l; i++)
+        n += s->flipped[i] ? 0 : 1;
+    return (double)n / (double)s->l;
 }
 
 /* =========================================================================
@@ -317,6 +345,7 @@ static void execute_movement(InterfaceState *s, int j)
         int old_pos = s->ifaces[j].pos;
         int new_pos = (old_pos + 1) % s->l;
         s->ifaces[j].pos = new_pos;
+        mark_flip(s, new_pos);   /* site between bonds old_pos and new_pos */
 
         if (new_pos < old_pos) {
             /* Wraparound: bond l-1 → 0. Re-sort and recompute everything. */
@@ -341,6 +370,7 @@ static void execute_movement(InterfaceState *s, int j)
         int old_pos = s->ifaces[jright].pos;
         int new_pos = (old_pos - 1 + s->l) % s->l;
         s->ifaces[jright].pos = new_pos;
+        mark_flip(s, old_pos);   /* site between bonds new_pos and old_pos */
 
         if (new_pos > old_pos) {
             /* Wraparound: bond 0 → l-1. Re-sort and recompute everything. */
@@ -365,6 +395,9 @@ static void execute_annihilation(InterfaceState *s, int j)
 {
     assert(s->k >= 2);
     assert(domain_width(s, j) == 1);
+
+    /* The lone dissenting spin of the width-1 domain flips. */
+    mark_flip(s, (s->ifaces[j].pos + 1) % s->l);
 
     double old_create_rate = (double)s->n_bulk * s->create_rate;
 
@@ -451,6 +484,9 @@ static void execute_creation(InterfaceState *s)
         p_right      = (s->ifaces[chosen_j].pos + local_idx + 2) % s->l;
         domain_color = -(s->ifaces[chosen_j].left_color); /* color of domain chosen_j */
     }
+
+    /* The nucleated spin (site between bonds p_left and p_right) flips. */
+    mark_flip(s, p_right);
 
     /* Insert the two new interfaces (insert_interface keeps sorted order). */
     insert_interface(s, p_left,  domain_color);

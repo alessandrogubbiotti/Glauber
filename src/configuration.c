@@ -35,11 +35,13 @@ int set_L(ModelConfig *conf, const char *value) {
 
 int set_annihilation(ModelConfig *conf, const char *value) {
     conf->annihilation = atof(value);
+    conf->ann_set = 1;
     return 0;
 }
 
 int set_creation(ModelConfig *conf, const char *value) {
     conf->creation = atof(value);
+    conf->create_set = 1;
     return 0;
 }
 
@@ -61,6 +63,31 @@ int set_Micro_n_steps(ModelConfig *conf, const char *value) {
     int v = atoi(value);
     if (v <= 0) return -1;
     conf->Micro_n_steps = v;
+    return 0;
+}
+
+int set_nu(ModelConfig *conf, const char *value) {
+    double v = atof(value);
+    if (v <= 0.0) return -1;
+    conf->nu = v;
+    return 0;
+}
+
+/* Accepts the strings glauber/scaled/explicit (case-insensitive) or 0/1/2. */
+int set_rate_mode(ModelConfig *conf, const char *value) {
+    char buf[32];
+    size_t i = 0;
+    while (value[i] && i < sizeof(buf) - 1) { buf[i] = (char)tolower((unsigned char)value[i]); i++; }
+    buf[i] = '\0';
+    if      (!strcmp(buf, "glauber")  || !strcmp(buf, "0")) conf->rate_mode = RATE_GLAUBER;
+    else if (!strcmp(buf, "scaled")   || !strcmp(buf, "1")) conf->rate_mode = RATE_SCALED;
+    else if (!strcmp(buf, "explicit") || !strcmp(buf, "2")) conf->rate_mode = RATE_EXPLICIT;
+    else return -1;
+    return 0;
+}
+
+int set_slowdown_exponent(ModelConfig *conf, const char *value) {
+    conf->slowdown_exponent = atof(value);
     return 0;
 }
 
@@ -89,20 +116,103 @@ int set_init_param(ModelConfig *conf, const char *value) {
 }
 
 static ModelConfigEntry model_config_table[] = {
-    {"N",              set_N},
-    {"T",              set_T},
-    {"L",              set_L},
-    {"annihilation",   set_annihilation},
-    {"creation",       set_creation},
-    {"N_simulations",  set_N_simulations},
-    {"resolution",     set_resolution},
-    {"Micro_n_steps",  set_Micro_n_steps},
-    {"init_function",  set_init_function},
-    {"init_param",     set_init_param},
+    {"N",                 set_N},
+    {"T",                 set_T},
+    {"L",                 set_L},
+    {"annihilation",      set_annihilation},
+    {"creation",          set_creation},
+    {"N_simulations",     set_N_simulations},
+    {"resolution",        set_resolution},
+    {"Micro_n_steps",     set_Micro_n_steps},
+    {"init_function",     set_init_function},
+    {"init_param",        set_init_param},
+    {"nu",                set_nu},
+    {"rate_mode",         set_rate_mode},
+    {"slowdown_exponent", set_slowdown_exponent},
     {NULL, NULL}
 };
 
+const char *rate_mode_name(RateMode m) {
+    switch (m) {
+        case RATE_GLAUBER:  return "glauber";
+        case RATE_SCALED:   return "scaled";
+        case RATE_EXPLICIT: return "explicit";
+        default:            return "unknown";
+    }
+}
+
+/* Sensible defaults, independent of how the struct was allocated. */
+void model_config_defaults(ModelConfig *conf) {
+    memset(conf, 0, sizeof(*conf));
+    conf->nu                = 1.0;
+    conf->rate_mode         = RATE_GLAUBER;
+    conf->slowdown_exponent = 0.0;
+}
+
+/* Derive gamma/beta/eta/p and the (ann, create) rates from (N, nu, rate_mode),
+ * following docs/section1.tex.  Must be called after the config file is read. */
+void model_apply_rate_mode(ModelConfig *conf) {
+    if (conf->N <= 0 || conf->nu <= 0.0) {
+        /* validate_model_config / the per-binary checks will report this. */
+        return;
+    }
+
+    double N  = (double)conf->N;
+    double nu = conf->nu;
+
+    conf->time_scale_formula = 2.0 * N * N;
+
+    if (conf->rate_mode == RATE_EXPLICIT) {
+        /* Rates come straight from the file; report what they imply. */
+        double ann = conf->annihilation, create = conf->creation;
+        if (!(ann > 0.0) || !(create > 0.0)) {
+            fprintf(stderr,
+                "WARNING: rate_mode=explicit requires positive annihilation and "
+                "creation keys (got ann=%g, create=%g).\n", ann, create);
+            return;
+        }
+        double nu_implied    = N * sqrt(create / ann);
+        double gamma_implied = (ann - create) / (ann + create);
+        conf->nu            = nu_implied;
+        conf->gamma         = gamma_implied;
+        conf->beta          = 0.5 * log(N / nu_implied);
+        conf->eta           = (N - nu_implied) / (N + nu_implied);
+        conf->p_equilibrium = 1.0 / (1.0 + sqrt(ann / create));
+        if (fabs(ann + create - 2.0) > 1e-9)
+            fprintf(stderr,
+                "WARNING: ann + create = %.10g != 2; the correlation hierarchy "
+                "does not close, so the analytic formulas are only asymptotic.\n",
+                ann + create);
+        return;
+    }
+
+    /* glauber / scaled: derive everything from (N, nu). */
+    if ((conf->ann_set || conf->create_set))
+        fprintf(stderr,
+            "WARNING: rate_mode=%s derives the rates from (N, nu); the "
+            "annihilation/creation keys in the config are ignored.\n",
+            rate_mode_name(conf->rate_mode));
+
+    double gamma = (N * N - nu * nu) / (N * N + nu * nu);
+    conf->gamma         = gamma;
+    conf->beta          = 0.5 * log(N / nu);
+    conf->eta           = (N - nu) / (N + nu);
+    conf->p_equilibrium = nu / (N + nu);
+
+    double ann    = 1.0 + gamma;
+    double create = 1.0 - gamma;
+    if (conf->rate_mode == RATE_SCALED) {
+        double s = pow(N, conf->slowdown_exponent);
+        ann    *= s;
+        create *= s;
+    }
+    conf->annihilation = ann;
+    conf->creation     = create;
+}
+
 void read_model_config_file(ModelConfig *conf, const char *filename) {
+    model_config_defaults(conf);
+
     FILE *file = fopen(filename, "r");
     if (!file) {
         perror("Error opening config file");
@@ -127,6 +237,9 @@ void read_model_config_file(ModelConfig *conf, const char *filename) {
     }
 
     fclose(file);
+
+    /* Fix (gamma, beta, eta, p) and (ann, create) from (N, nu, rate_mode). */
+    model_apply_rate_mode(conf);
 }
 
 void validate_model_config(const ModelConfig *conf) {
@@ -154,6 +267,38 @@ void print_model_config(const ModelConfig *conf) {
     printf("  N_simulations:  %d\n",   conf->N_simulations);
     printf("  resolution:     %d\n",   conf->resolution);
     printf("  Micro_n_steps:  %d\n",   conf->Micro_n_steps);
+    print_derived_banner(conf);
+}
+
+/* Human-readable derived block for the run banner. */
+void print_derived_banner(const ModelConfig *conf) {
+    printf("  --- derived (section1.tex) ---\n");
+    printf("  rate_mode:      %s", rate_mode_name(conf->rate_mode));
+    if (conf->rate_mode == RATE_SCALED)
+        printf("  (a=%.4g)", conf->slowdown_exponent);
+    printf("\n");
+    printf("  nu:             %.10g\n", conf->nu);
+    printf("  beta:           %.10g\n", conf->beta);
+    printf("  gamma:          %.10g\n", conf->gamma);
+    printf("  eta:            %.10g\n", conf->eta);
+    printf("  p_equilibrium:  %.10g\n", conf->p_equilibrium);
+    printf("  ann:            %.10g\n", conf->annihilation);
+    printf("  create:         %.10g\n", conf->creation);
+    printf("  time_scale:     2*N^2 = %.10g\n", conf->time_scale_formula);
+}
+
+/* Common derived JSON fields, shared by every binary's configuration.json. */
+void fprint_derived_block(FILE *f, const ModelConfig *conf) {
+    fprintf(f, "  \"nu\": %.10g,\n",                  conf->nu);
+    fprintf(f, "  \"beta\": %.10g,\n",                conf->beta);
+    fprintf(f, "  \"gamma\": %.10g,\n",               conf->gamma);
+    fprintf(f, "  \"eta\": %.10g,\n",                 conf->eta);
+    fprintf(f, "  \"p_equilibrium\": %.10g,\n",       conf->p_equilibrium);
+    fprintf(f, "  \"rate_mode\": \"%s\",\n",          rate_mode_name(conf->rate_mode));
+    fprintf(f, "  \"slowdown_exponent\": %.10g,\n",   conf->slowdown_exponent);
+    fprintf(f, "  \"ann\": %.10g,\n",                 conf->annihilation);
+    fprintf(f, "  \"create\": %.10g,\n",              conf->creation);
+    fprintf(f, "  \"time_scale_formula\": %.10g\n",   conf->time_scale_formula);
 }
 
 void print_conf_json(const ModelConfig *conf, const char *dirname) {
@@ -165,11 +310,12 @@ void print_conf_json(const ModelConfig *conf, const char *dirname) {
     fprintf(f, "  \"N\": %d,\n",              conf->N);
     fprintf(f, "  \"T\": %lf,\n",             conf->T);
     fprintf(f, "  \"L\": %d,\n",              conf->L);
-    fprintf(f, "  \"annihilation\": %.5f,\n", conf->annihilation);
-    fprintf(f, "  \"creation\": %.5f,\n",     conf->creation);
+    fprintf(f, "  \"annihilation\": %.10g,\n", conf->annihilation);
+    fprintf(f, "  \"creation\": %.10g,\n",     conf->creation);
     fprintf(f, "  \"N_simulations\": %d,\n",  conf->N_simulations);
     fprintf(f, "  \"resolution\": %d,\n",     conf->resolution);
-    fprintf(f, "  \"Micro_n_steps\": %d\n",   conf->Micro_n_steps);
+    fprintf(f, "  \"Micro_n_steps\": %d,\n",  conf->Micro_n_steps);
+    fprint_derived_block(f, conf);
     fprintf(f, "}\n");
     fclose(f);
 }

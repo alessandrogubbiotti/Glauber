@@ -65,7 +65,8 @@ static void write_conf_json(const ModelConfig *conf, const char *dir)
     fprintf(f, "  \"N_simulations\": %d,\n",   conf->N_simulations);
     fprintf(f, "  \"resolution\": %d,\n",      conf->resolution);
     fprintf(f, "  \"Micro_n_steps\": %d,\n",   conf->Micro_n_steps);
-    fprintf(f, "  \"algorithm\": \"gillespie\"\n");
+    fprintf(f, "  \"algorithm\": \"gillespie\",\n");
+    fprint_derived_block(f, conf);
     fprintf(f, "}\n");
     fclose(f);
 }
@@ -149,6 +150,7 @@ int main(void)
            model->annihilation, model->creation);
     printf("  N_simulations=%d  resolution=%d  Mac_T=%d\n",
            N_sim, model->resolution, Mac_T);
+    print_derived_banner(model);
 
     /* --- Observation sites ----------------------------------------------- */
     int x0 = l / 2;          /* site for mean-spin evolution            */
@@ -233,7 +235,8 @@ int main(void)
         fprintf(tf, "  \"N_simulations\": 1,\n");
         fprintf(tf, "  \"resolution\": %d,\n",     model->resolution);
         fprintf(tf, "  \"Micro_n_steps\": %d,\n",  model->Micro_n_steps);
-        fprintf(tf, "  \"algorithm\": \"gillespie\"\n");
+        fprintf(tf, "  \"algorithm\": \"gillespie\",\n");
+        fprint_derived_block(tf, model);
         fprintf(tf, "}\n");
         fclose(tf);
     }

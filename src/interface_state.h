@@ -47,6 +47,13 @@ typedef struct {
     double     create_tau;
 
     long n_events;   /* total Gillespie steps taken since alloc */
+
+    /* Optional per-site flip tracking (persistence measurements).
+     * NULL unless istate_track_flips() was called; then flipped[i] = 1 once
+     * the spin at site i has flipped at least once.  Every Gillespie event
+     * flips exactly one spin (movement, annihilation of a width-1 domain,
+     * creation of a pair), so maintenance is O(1) per event. */
+    unsigned char *flipped;
 } InterfaceState;
 
 /* Build an InterfaceState from an existing spin array.
@@ -66,6 +73,14 @@ void istate_to_spins(const InterfaceState *s, int *spins_out);
 /* Advance the simulation until macro_time >= target_macro_time.
  * Modifies the interface list in place. */
 void istate_advance_to(InterfaceState *s, double target_macro_time);
+
+/* Enable per-site flip tracking from the CURRENT state (all sites marked
+ * un-flipped).  Call right after istate_alloc for persistence measurements. */
+void istate_track_flips(InterfaceState *s);
+
+/* Fraction of sites whose spin has never flipped since istate_track_flips.
+ * This is the persistence observable P(t).  Requires tracking enabled. */
+double istate_never_flipped_fraction(const InterfaceState *s);
 
 /* Convenience accessor. */
 static inline int istate_n_interfaces(const InterfaceState *s) { return s->k; }

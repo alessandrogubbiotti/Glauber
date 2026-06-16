@@ -1,13 +1,39 @@
+# ---------------------------------------------------------------------------
+# Model configuration.  Primary parameters: N, nu, and the rate mode.
+# Conventions are fixed in docs/section1.tex (Section 1 of the paper).
+#
+#   gamma = (N^2 - nu^2)/(N^2 + nu^2),  beta = log(N/nu)/2,
+#   eta   = (N - nu)/(N + nu),          p    = nu/(N + nu).
+#   Reversibility: Bernoulli(p) is stationary iff ann/create = N^2/nu^2.
+#   Engine time tau = micro_time/N^2; analytic formulas use t = 2*N^2*tau.
+# ---------------------------------------------------------------------------
+
 N=150
+nu=1.0
 T=4
 L=4
+
+# rate_mode = glauber | scaled | explicit
+#   glauber : ann = 1+gamma, create = 1-gamma   (closes the hierarchy)
+#   scaled  : glauber rates times pow(N, slowdown_exponent)
+#   explicit: read the annihilation/creation keys verbatim (only asymptotically
+#             Glauber unless ann+create = 2)
+rate_mode=glauber
+slowdown_exponent=0.0
+
+# annihilation/creation are IGNORED in glauber/scaled mode (kept for reference;
+# they are the legacy (ann, create) = (2, 2/N^2) choice, ratio N^2 but
+# ann+create = 2 + 2/N^2 so the hierarchy does not close).  Uncomment together
+# with rate_mode=explicit to use them.
+# annihilation=2.0
+# creation=8.888888e-05
+
 resolution=100
 Micro_n_steps=200
 N_simulations=500
-annihilation=0.0005443311
-creation=2.41924913e-08
 init_function=1
 init_param=0.006667
+
 A1_magnetization=2
 B1_magnetization=3
 A1_corr=2
