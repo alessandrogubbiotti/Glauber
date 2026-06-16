@@ -35,6 +35,10 @@
 #include <errno.h>
 #include <sys/stat.h>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "configuration.h"
 #include "interface_state.h"
 #include "spin_init.h"
@@ -48,6 +52,13 @@ static double T_VALUES[] = { 0.25, 0.5, 1.0, 2.0 };
 
 static unsigned long read_base_seed(void)
 {
+    /* Reproducibility hook: a fixed seed via $CORR2PT_SEED (used by the
+     * serial-vs-parallel validation) overrides the random source. */
+    const char *env = getenv("CORR2PT_SEED");
+    if (env && *env) {
+        unsigned long s = strtoul(env, NULL, 10);
+        if (s) return s;
+    }
     unsigned long seed = 0;
     FILE *f = fopen("/dev/urandom", "rb");
     if (f) { fread(&seed, sizeof(seed), 1, f); fclose(f); }
@@ -122,7 +133,6 @@ int main(int argc, char **argv)
     double **G_xx = calloc(N_T, sizeof(double *));
     for (int t = 0; t < N_T; t++)
         G_xx[t] = calloc((size_t)n_out * n_out, sizeof(double));
-    double *xc_vec = malloc(n_out * sizeof(double));
 
     /* Equal-time correlator C(r) at the N_T+1 snapshot times {0, T_1, ..., T_NT}.
      * In the equilibrium start these must all coincide with the static
@@ -144,105 +154,210 @@ int main(int argc, char **argv)
         P_sq[q]  = calloc(n_out, sizeof(double));
     }
 
-    int *spins_init = malloc(l * sizeof(int));
-    int *eta_init   = malloc(l * sizeof(int));
-    int *eta_snap   = malloc(l * sizeof(int));
-    int **snaps     = malloc(N_T * sizeof(int *));
-    for (int t = 0; t < N_T; t++)
-        snaps[t] = malloc(l * sizeof(int));
+    /* Pre-sample every initial condition SERIALLY from one IC stream, so the
+     * IC sequence is bit-for-bit identical to the serial code and independent
+     * of the thread schedule.  The expensive trajectory evolution and the
+     * correlator reductions are then done in parallel below.  (The per-sim
+     * trajectory seed is already a deterministic function of `sim`, so the whole
+     * computation is schedule-independent up to floating-point summation order
+     * in the reductions.) */
+    int *all_ic = malloc((size_t)n_sims * l * sizeof(int));
+    if (!all_ic) {
+        fprintf(stderr, "alloc all_ic (%d sims x %d) failed\n", n_sims, l);
+        exit(1);
+    }
 
     unsigned long base_seed = read_base_seed();
-    /* Dedicated GSL stream for the initial condition. */
-    gsl_rng *ic_rng = gsl_rng_alloc(gsl_rng_mt19937);
-    gsl_rng_set(ic_rng, base_seed ^ 0x9E3779B97F4A7C15UL);
-
-    for (int sim = 0; sim < n_sims; sim++) {
-        if (sim % 200 == 0)
-            printf("  sim %d/%d\n", sim, n_sims), fflush(stdout);
-
-        unsigned long seed = base_seed ^ ((unsigned long)(sim + 1) * 6364136223846793005UL);
-
-        /* Sample the initial condition. */
-        if (disordered)
-            sample_disordered_spins(spins_init, l, ic_rng);
-        else
-            sample_equilibrium_interfaces(spins_init, l, p, ic_rng);
-
-        /* Build interface state from the IC. */
-        InterfaceState *gs = istate_alloc(spins_init, l, model->N,
-                                          model->annihilation, model->creation, seed);
-
-        /* Record spin array at t=0 and its interface field. */
-        istate_to_spins(gs, spins_init);
-        spins_to_eta(spins_init, l, eta_init);
-
-        /* Advance sequentially to each T and record. */
-        for (int ti = 0; ti < N_T; ti++) {
-            istate_advance_to(gs, T_VALUES[ti]);
-            istate_to_spins(gs, snaps[ti]);
+    {
+        /* Dedicated GSL stream for the initial condition. */
+        gsl_rng *ic_rng = gsl_rng_alloc(gsl_rng_mt19937);
+        gsl_rng_set(ic_rng, base_seed ^ 0x9E3779B97F4A7C15UL);
+        for (int sim = 0; sim < n_sims; sim++) {
+            int *ic = all_ic + (size_t)sim * l;
+            if (disordered)
+                sample_disordered_spins(ic, l, ic_rng);
+            else
+                sample_equilibrium_interfaces(ic, l, p, ic_rng);
         }
-        istate_free(gs);
+        gsl_rng_free(ic_rng);
+    }
 
-        /* Translation-averaged time-delayed correlators.
-         * G_n(T): xcorr[n] = (1/l) sum_x spins_init[x] * snaps[ti][(x+n)%l].
-         * H_n(T): same with the interface fields eta_b. */
-        for (int ti = 0; ti < N_T; ti++) {
-            spins_to_eta(snaps[ti], l, eta_snap);
-            for (int n = 0; n < n_out; n++) {
-                double xc = 0.0, hc = 0.0;
-                for (int x = 0; x < l; x++) {
-                    int y = x + n; if (y >= l) y -= l;
-                    xc += (double)spins_init[x] * (double)snaps[ti][y];
-                    hc += (double)eta_init[x]   * (double)eta_snap[y];
+#ifdef _OPENMP
+    printf("  OpenMP: %d threads\n", omp_get_max_threads());
+#endif
+
+    int done = 0;
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
+    {
+        /* Per-thread scratch buffers. */
+        int    *spins0   = malloc(l * sizeof(int));
+        int    *eta_init = malloc(l * sizeof(int));
+        int    *eta_snap = malloc(l * sizeof(int));
+        int   **snaps    = malloc(N_T * sizeof(int *));
+        for (int t = 0; t < N_T; t++) snaps[t] = malloc(l * sizeof(int));
+        double *xc_vec   = malloc(n_out * sizeof(double));
+
+        /* Per-thread accumulators; summed into the shared arrays under a single
+         * critical section after the loop, so the += never races and the result
+         * matches the serial run up to floating-point summation order. */
+        double **G_sum_t = calloc(N_T, sizeof(double *));
+        double **G_sq_t  = calloc(N_T, sizeof(double *));
+        double **H_sum_t = calloc(N_T, sizeof(double *));
+        double **H_sq_t  = calloc(N_T, sizeof(double *));
+        double **G_xx_t  = calloc(N_T, sizeof(double *));
+        for (int t = 0; t < N_T; t++) {
+            G_sum_t[t] = calloc(n_out, sizeof(double));
+            G_sq_t[t]  = calloc(n_out, sizeof(double));
+            H_sum_t[t] = calloc(n_out, sizeof(double));
+            H_sq_t[t]  = calloc(n_out, sizeof(double));
+            G_xx_t[t]  = calloc((size_t)n_out * n_out, sizeof(double));
+        }
+        double **C_sum_t = calloc(N_T + 1, sizeof(double *));
+        double **C_sq_t  = calloc(N_T + 1, sizeof(double *));
+        for (int t = 0; t <= N_T; t++) {
+            C_sum_t[t] = calloc(n_out, sizeof(double));
+            C_sq_t[t]  = calloc(n_out, sizeof(double));
+        }
+        double **P_sum_t = calloc(n_pairs, sizeof(double *));
+        double **P_sq_t  = calloc(n_pairs, sizeof(double *));
+        for (int q = 0; q < n_pairs; q++) {
+            P_sum_t[q] = calloc(n_out, sizeof(double));
+            P_sq_t[q]  = calloc(n_out, sizeof(double));
+        }
+
+#ifdef _OPENMP
+#pragma omp for schedule(dynamic)
+#endif
+        for (int sim = 0; sim < n_sims; sim++) {
+            unsigned long seed =
+                base_seed ^ ((unsigned long)(sim + 1) * 6364136223846793005UL);
+
+            /* Build interface state from the pre-sampled IC. */
+            InterfaceState *gs = istate_alloc(all_ic + (size_t)sim * l, l, model->N,
+                                              model->annihilation, model->creation, seed);
+
+            /* Canonical spin array at t=0 and its interface field. */
+            istate_to_spins(gs, spins0);
+            spins_to_eta(spins0, l, eta_init);
+
+            /* Advance sequentially to each T and record. */
+            for (int ti = 0; ti < N_T; ti++) {
+                istate_advance_to(gs, T_VALUES[ti]);
+                istate_to_spins(gs, snaps[ti]);
+            }
+            istate_free(gs);
+
+            /* Translation-averaged time-delayed correlators.
+             * G_n(T): xcorr[n] = (1/l) sum_x spins0[x] * snaps[ti][(x+n)%l].
+             * H_n(T): same with the interface fields eta_b. */
+            for (int ti = 0; ti < N_T; ti++) {
+                spins_to_eta(snaps[ti], l, eta_snap);
+                for (int n = 0; n < n_out; n++) {
+                    double xc = 0.0, hc = 0.0;
+                    for (int x = 0; x < l; x++) {
+                        int y = x + n; if (y >= l) y -= l;
+                        xc += (double)spins0[x]   * (double)snaps[ti][y];
+                        hc += (double)eta_init[x] * (double)eta_snap[y];
+                    }
+                    xc /= l; hc /= l;
+                    xc_vec[n] = xc;
+                    G_sum_t[ti][n] += xc;  G_sq_t[ti][n] += xc * xc;
+                    H_sum_t[ti][n] += hc;  H_sq_t[ti][n] += hc * hc;
                 }
-                xc /= l; hc /= l;
-                xc_vec[n] = xc;
-                G_sum[ti][n] += xc;  G_sq[ti][n] += xc * xc;
-                H_sum[ti][n] += hc;  H_sq[ti][n] += hc * hc;
-            }
-            /* outer product for the covariance matrix of G */
-            for (int n = 0; n < n_out; n++) {
-                double *row = G_xx[ti] + (size_t)n * n_out;
-                double xn = xc_vec[n];
-                for (int m = 0; m < n_out; m++)
-                    row[m] += xn * xc_vec[m];
-            }
-        }
-
-        /* Translation-averaged equal-time correlator C(r) at every snapshot. */
-        for (int ti = 0; ti <= N_T; ti++) {
-            const int *snap = (ti == 0) ? spins_init : snaps[ti - 1];
-            for (int r = 0; r < n_out; r++) {
-                double c = 0.0;
-                for (int x = 0; x < l; x++) {
-                    int y = x + r; if (y >= l) y -= l;
-                    c += (double)snap[x] * (double)snap[y];
+                /* outer product for the covariance matrix of G */
+                for (int n = 0; n < n_out; n++) {
+                    double *row = G_xx_t[ti] + (size_t)n * n_out;
+                    double xn = xc_vec[n];
+                    for (int m = 0; m < n_out; m++)
+                        row[m] += xn * xc_vec[m];
                 }
-                c /= l;
-                C_sum[ti][r] += c;
-                C_sq[ti][r]  += c * c;
             }
-        }
 
-        /* Two-time cross-correlations between snapshot pairs (T_a, T_b). */
-        {
-            int q = 0;
-            for (int a = 0; a < N_T; a++) {
-                for (int b = a + 1; b < N_T; b++, q++) {
-                    for (int n = 0; n < n_out; n++) {
-                        double xc = 0.0;
-                        for (int x = 0; x < l; x++) {
-                            int y = x + n; if (y >= l) y -= l;
-                            xc += (double)snaps[a][x] * (double)snaps[b][y];
+            /* Translation-averaged equal-time correlator C(r) at every snapshot. */
+            for (int ti = 0; ti <= N_T; ti++) {
+                const int *snap = (ti == 0) ? spins0 : snaps[ti - 1];
+                for (int r = 0; r < n_out; r++) {
+                    double c = 0.0;
+                    for (int x = 0; x < l; x++) {
+                        int y = x + r; if (y >= l) y -= l;
+                        c += (double)snap[x] * (double)snap[y];
+                    }
+                    c /= l;
+                    C_sum_t[ti][r] += c;
+                    C_sq_t[ti][r]  += c * c;
+                }
+            }
+
+            /* Two-time cross-correlations between snapshot pairs (T_a, T_b). */
+            {
+                int q = 0;
+                for (int a = 0; a < N_T; a++) {
+                    for (int b = a + 1; b < N_T; b++, q++) {
+                        for (int n = 0; n < n_out; n++) {
+                            double xc = 0.0;
+                            for (int x = 0; x < l; x++) {
+                                int y = x + n; if (y >= l) y -= l;
+                                xc += (double)snaps[a][x] * (double)snaps[b][y];
+                            }
+                            xc /= l;
+                            P_sum_t[q][n] += xc;
+                            P_sq_t[q][n]  += xc * xc;
                         }
-                        xc /= l;
-                        P_sum[q][n] += xc;
-                        P_sq[q][n]  += xc * xc;
                     }
                 }
             }
+
+#ifdef _OPENMP
+#pragma omp critical
+#endif
+            {
+                done++;
+                if (done % 200 == 0)
+                    printf("  sim %d/%d\n", done, n_sims), fflush(stdout);
+            }
         }
+
+        /* Reduce per-thread accumulators into the shared arrays. */
+#ifdef _OPENMP
+#pragma omp critical
+#endif
+        {
+            for (int t = 0; t < N_T; t++) {
+                for (int n = 0; n < n_out; n++) {
+                    G_sum[t][n] += G_sum_t[t][n];  G_sq[t][n] += G_sq_t[t][n];
+                    H_sum[t][n] += H_sum_t[t][n];  H_sq[t][n] += H_sq_t[t][n];
+                }
+                for (size_t k = 0; k < (size_t)n_out * n_out; k++)
+                    G_xx[t][k] += G_xx_t[t][k];
+            }
+            for (int t = 0; t <= N_T; t++)
+                for (int r = 0; r < n_out; r++) {
+                    C_sum[t][r] += C_sum_t[t][r];
+                    C_sq[t][r]  += C_sq_t[t][r];
+                }
+            for (int q = 0; q < n_pairs; q++)
+                for (int n = 0; n < n_out; n++) {
+                    P_sum[q][n] += P_sum_t[q][n];
+                    P_sq[q][n]  += P_sq_t[q][n];
+                }
+        }
+
+        /* Free per-thread buffers. */
+        for (int t = 0; t < N_T; t++) {
+            free(G_sum_t[t]); free(G_sq_t[t]); free(H_sum_t[t]); free(H_sq_t[t]);
+            free(G_xx_t[t]); free(snaps[t]);
+        }
+        free(G_sum_t); free(G_sq_t); free(H_sum_t); free(H_sq_t); free(G_xx_t);
+        for (int t = 0; t <= N_T; t++) { free(C_sum_t[t]); free(C_sq_t[t]); }
+        free(C_sum_t); free(C_sq_t);
+        for (int q = 0; q < n_pairs; q++) { free(P_sum_t[q]); free(P_sq_t[q]); }
+        free(P_sum_t); free(P_sq_t);
+        free(snaps); free(spins0); free(eta_init); free(eta_snap); free(xc_vec);
     }
+
+    free(all_ic);
 
     char out_path[600];
 
@@ -375,18 +490,16 @@ int main(int argc, char **argv)
     if (system(cmd) != 0)
         fprintf(stderr, "Warning: plot_theory_vs_mc.py failed.\n");
 
-    gsl_rng_free(ic_rng);
     for (int t = 0; t < N_T; t++) {
         free(G_sum[t]); free(G_sq[t]); free(H_sum[t]); free(H_sq[t]);
-        free(snaps[t]); free(G_xx[t]);
+        free(G_xx[t]);
     }
     free(G_sum); free(G_sq); free(H_sum); free(H_sq);
-    free(G_xx); free(xc_vec);
+    free(G_xx);
     for (int t = 0; t <= N_T; t++) { free(C_sum[t]); free(C_sq[t]); }
     free(C_sum); free(C_sq);
     for (int q = 0; q < n_pairs; q++) { free(P_sum[q]); free(P_sq[q]); }
     free(P_sum); free(P_sq);
-    free(snaps); free(spins_init); free(eta_init); free(eta_snap);
     if (model->initialization_param) free(model->initialization_param);
     free(model);
     return 0;
