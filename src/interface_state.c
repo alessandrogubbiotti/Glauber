@@ -10,6 +10,83 @@
 #define INF 1e300
 
 /* =========================================================================
+ * Indexed binary min-heap over the k domain events + 1 creation event.
+ * Replaces the O(k) next-event linear scan with O(1) peek / O(log k) update.
+ * Node ids: 0..k-1 = domains, CREATE_ID (-1) = the global creation event.
+ * The heap is kept valid at every step: each single tau change is followed
+ * immediately by heap_update() (correct by the standard decrease/increase-key
+ * argument), while structural events (creation, annihilation, wraparound
+ * movement) rebuild it in O(k) via heap_build().
+ * ========================================================================= */
+
+#define CREATE_ID (-1)
+
+static inline double heap_key(const InterfaceState *s, int id)
+{
+    return (id == CREATE_ID) ? s->create_tau : s->domain_tau[id];
+}
+
+/* Place node `id` at heap slot `pos`, updating its recorded position. */
+static inline void heap_place(InterfaceState *s, int pos, int id)
+{
+    s->heap[pos] = id;
+    if (id == CREATE_ID) s->heap_create_pos = pos;
+    else                 s->heap_pos[id]    = pos;
+}
+
+static void heap_sift_up(InterfaceState *s, int pos)
+{
+    int    id  = s->heap[pos];
+    double key = heap_key(s, id);
+    while (pos > 0) {
+        int parent = (pos - 1) / 2;
+        int pid    = s->heap[parent];
+        if (heap_key(s, pid) <= key) break;
+        heap_place(s, pos, pid);
+        pos = parent;
+    }
+    heap_place(s, pos, id);
+}
+
+static void heap_sift_down(InterfaceState *s, int pos)
+{
+    int    n   = s->heap_n;
+    int    id  = s->heap[pos];
+    double key = heap_key(s, id);
+    while (1) {
+        int    sm  = pos;
+        double smk = key;
+        int    lft = 2 * pos + 1, rgt = 2 * pos + 2;
+        if (lft < n) { double k = heap_key(s, s->heap[lft]); if (k < smk) { sm = lft; smk = k; } }
+        if (rgt < n) { double k = heap_key(s, s->heap[rgt]); if (k < smk) { sm = rgt; smk = k; } }
+        if (sm == pos) break;
+        heap_place(s, pos, s->heap[sm]);
+        pos = sm;
+    }
+    heap_place(s, pos, id);
+}
+
+/* One node's key changed; restore the heap (the rest is assumed valid). */
+static inline void heap_update(InterfaceState *s, int id)
+{
+    int pos = (id == CREATE_ID) ? s->heap_create_pos : s->heap_pos[id];
+    heap_sift_up(s, pos);
+    pos = (id == CREATE_ID) ? s->heap_create_pos : s->heap_pos[id];
+    heap_sift_down(s, pos);
+}
+
+/* Rebuild the whole heap from the current domain_tau[] and create_tau (O(k)).
+ * Used after structural events that add/remove domains or reindex the array. */
+static void heap_build(InterfaceState *s)
+{
+    s->heap_n = s->k + 1;
+    for (int j = 0; j < s->k; j++) heap_place(s, j, j);
+    heap_place(s, s->k, CREATE_ID);
+    for (int pos = s->heap_n / 2 - 1; pos >= 0; pos--)
+        heap_sift_down(s, pos);
+}
+
+/* =========================================================================
  * Internal helpers — not exposed in the header.
  * ========================================================================= */
 
@@ -106,7 +183,9 @@ static int insert_interface(InterfaceState *s, int pos, int left_color)
         s->k_alloc = s->k_alloc ? s->k_alloc * 2 : 4;
         s->ifaces     = realloc(s->ifaces,     s->k_alloc * sizeof(Interface));
         s->domain_tau = realloc(s->domain_tau, s->k_alloc * sizeof(double));
-        if (!s->ifaces || !s->domain_tau) {
+        s->heap       = realloc(s->heap,       (s->k_alloc + 1) * sizeof(int));
+        s->heap_pos   = realloc(s->heap_pos,   s->k_alloc * sizeof(int));
+        if (!s->ifaces || !s->domain_tau || !s->heap || !s->heap_pos) {
             perror("insert_interface: realloc failed");
             exit(EXIT_FAILURE);
         }
@@ -162,6 +241,19 @@ static void assert_invariants(const InterfaceState *s)
         nb += bulk_of(domain_width(s, j));
     }
     assert(s->n_bulk == nb);
+
+    /* Heap consistency: positions round-trip and the min-heap order holds. */
+    if (s->heap) {
+        assert(s->heap_n == s->k + 1);
+        for (int p = 0; p < s->heap_n; p++) {
+            int id = s->heap[p];
+            int recorded = (id == CREATE_ID) ? s->heap_create_pos : s->heap_pos[id];
+            assert(recorded == p);
+            int lft = 2 * p + 1, rgt = 2 * p + 2;
+            if (lft < s->heap_n) assert(heap_key(s, id) <= heap_key(s, s->heap[lft]));
+            if (rgt < s->heap_n) assert(heap_key(s, id) <= heap_key(s, s->heap[rgt]));
+        }
+    }
 }
 #else
 static inline void assert_invariants(const InterfaceState *s) { (void)s; }
@@ -190,6 +282,10 @@ InterfaceState *istate_alloc(const int *spins, int l, int N,
     s->ifaces      = NULL;
     s->domain_tau  = NULL;
     s->create_tau  = INF;
+    s->heap        = NULL;
+    s->heap_pos    = NULL;
+    s->heap_create_pos = 0;
+    s->heap_n      = 0;
     s->flipped     = NULL;   /* tracking off unless istate_track_flips() */
     s->uniform_color = spins[0]; /* exact when k==0; harmless default else */
 
@@ -225,6 +321,11 @@ InterfaceState *istate_alloc(const int *spins, int l, int N,
 
     s->create_tau = sample_create_tau(s);
 
+    /* If k == 0 no interface was inserted, so insert_interface never allocated
+     * the heap arrays; reserve room for the lone creation node. */
+    if (!s->heap) s->heap = malloc(1 * sizeof(int));
+    heap_build(s);
+
     assert_invariants(s);
     return s;
 }
@@ -238,6 +339,8 @@ void istate_free(InterfaceState *s)
     gsl_rng_free(s->rng);
     free(s->ifaces);
     free(s->domain_tau);
+    free(s->heap);
+    free(s->heap_pos);
     free(s->flipped);
     free(s);
 }
@@ -351,15 +454,20 @@ static void execute_movement(InterfaceState *s, int j)
             /* Wraparound: bond l-1 → 0. Re-sort and recompute everything. */
             reinsert_sorted(s, j);
             recompute_all(s, old_create_rate);
+            heap_build(s);
         } else {
             int new_wj = old_wj - 1;
             int new_wl = old_wl + 1;
             update_n_bulk(s, old_wj, new_wj);
             update_n_bulk(s, old_wl, new_wl);
             update_create_tau(s, old_create_rate);
+            heap_update(s, CREATE_ID);
             s->domain_tau[j] = sample_domain_tau(s, j);
-            if (domain_rate(old_wl, s->ann_rate) != domain_rate(new_wl, s->ann_rate))
+            heap_update(s, j);
+            if (domain_rate(old_wl, s->ann_rate) != domain_rate(new_wl, s->ann_rate)) {
                 s->domain_tau[jleft] = sample_domain_tau(s, jleft);
+                heap_update(s, jleft);
+            }
         }
 
     } else {
@@ -376,15 +484,20 @@ static void execute_movement(InterfaceState *s, int j)
             /* Wraparound: bond 0 → l-1. Re-sort and recompute everything. */
             reinsert_sorted(s, jright);
             recompute_all(s, old_create_rate);
+            heap_build(s);
         } else {
             int new_wj = old_wj - 1;
             int new_wr = old_wr + 1;
             update_n_bulk(s, old_wj, new_wj);
             update_n_bulk(s, old_wr, new_wr);
             update_create_tau(s, old_create_rate);
+            heap_update(s, CREATE_ID);
             s->domain_tau[j] = sample_domain_tau(s, j);
-            if (domain_rate(old_wr, s->ann_rate) != domain_rate(new_wr, s->ann_rate))
+            heap_update(s, j);
+            if (domain_rate(old_wr, s->ann_rate) != domain_rate(new_wr, s->ann_rate)) {
                 s->domain_tau[jright] = sample_domain_tau(s, jright);
+                heap_update(s, jright);
+            }
         }
     }
 }
@@ -411,6 +524,7 @@ static void execute_annihilation(InterfaceState *s, int j)
         remove_interface(s, 0);
         /* k is now 0; no domain events remain. */
         update_create_tau(s, old_create_rate);
+        heap_build(s);
         return;
     }
 
@@ -445,6 +559,7 @@ static void execute_annihilation(InterfaceState *s, int j)
     s->domain_tau[j_merged] = sample_domain_tau(s, j_merged);
 
     update_create_tau(s, old_create_rate);
+    heap_build(s);
 }
 
 /* execute_creation: global creation event fires.
@@ -500,6 +615,7 @@ static void execute_creation(InterfaceState *s)
         s->domain_tau[j] = sample_domain_tau(s, j);
     }
     s->create_tau = sample_create_tau(s);
+    heap_build(s);
 }
 
 /* =========================================================================
@@ -512,16 +628,10 @@ void istate_advance_to(InterfaceState *s, double target_macro_time)
 
     while (s->micro_time < target_micro) {
 
-        /* Find the minimum event time across all domain events and creation. */
-        int    best_j   = -1;   /* -1 means creation event */
-        double best_tau = s->create_tau;
-
-        for (int j = 0; j < s->k; j++) {
-            if (s->domain_tau[j] < best_tau) {
-                best_tau = s->domain_tau[j];
-                best_j   = j;
-            }
-        }
+        /* Next event = heap minimum (O(1) peek).  best_j == -1 → creation. */
+        int    best_id  = s->heap[0];
+        double best_tau = heap_key(s, best_id);
+        int    best_j   = (best_id == CREATE_ID) ? -1 : best_id;
 
         /* If no event exists (all INF), time cannot advance — absorbing state. */
         if (best_tau >= INF) {
@@ -541,11 +651,12 @@ void istate_advance_to(InterfaceState *s, double target_macro_time)
 
         if (best_j < 0) {
             /* Global creation event. */
-            s->create_tau = INF; /* consumed; will be resampled in execute_creation */
+            s->create_tau = INF; /* consumed; execute_creation rebuilds the heap */
             execute_creation(s);
         } else {
             int w = domain_width(s, best_j);
             s->domain_tau[best_j] = INF; /* consumed */
+            heap_update(s, best_j);      /* sink it; keeps the heap valid */
             if (w == 1)
                 execute_annihilation(s, best_j);
             else

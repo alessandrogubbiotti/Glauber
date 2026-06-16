@@ -54,6 +54,16 @@ typedef struct {
      * flips exactly one spin (movement, annihilation of a width-1 domain,
      * creation of a pair), so maintenance is O(1) per event. */
     unsigned char *flipped;
+
+    /* Indexed binary min-heap over the k domain events + 1 creation event,
+     * replacing the O(k) next-event linear scan with O(1) peek / O(log k)
+     * update.  Node ids: 0..k-1 = domains, -1 = the global creation event.
+     * Rebuilt (O(k)) on structural events (creation/annihilation/wraparound);
+     * incrementally updated on the common non-wraparound movement. */
+    int *heap;            /* heap[0..heap_n-1] = node ids                  */
+    int *heap_pos;        /* heap_pos[j] = index of domain j within heap[]  */
+    int  heap_create_pos; /* index of the creation node within heap[]       */
+    int  heap_n;          /* number of heap nodes (= k + 1)                 */
 } InterfaceState;
 
 /* Build an InterfaceState from an existing spin array.
