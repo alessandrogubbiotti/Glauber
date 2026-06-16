@@ -9,6 +9,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "configuration.h"
 #include "configuration_statistics.h"
 #include "interface_state.h"
@@ -29,6 +33,13 @@ static double now_seconds(void)
  * ------------------------------------------------------------------------- */
 static unsigned long read_base_seed(void)
 {
+    /* Reproducibility hook: a fixed seed via $GILLESPIE_SEED (used by the
+     * serial-vs-parallel validation) overrides the random source. */
+    const char *env = getenv("GILLESPIE_SEED");
+    if (env && *env) {
+        unsigned long s = strtoul(env, NULL, 10);
+        if (s) return s;
+    }
     unsigned long seed = 0;
     FILE *f = fopen("/dev/urandom", "rb");
     if (f) { fread(&seed, sizeof(seed), 1, f); fclose(f); }
@@ -214,8 +225,6 @@ int main(void)
     /* A(lag) = Σ_{sim,t} σ(x0,t)⋅σ(x0,t+lag),  count(lag) = N_sim*(Mac_T-lag) */
     double *autocorr_sum   = calloc(Mac_T, sizeof(double));
     long   *autocorr_count = calloc(Mac_T, sizeof(long));
-    /* Reusable per-simulation spin history at x0. */
-    double *spin_hist = malloc(Mac_T * sizeof(double));
 
     /* --- Trajectory subfolder (sim 0 only, compatible with existing plotter) */
     char traj_dir[700];
@@ -251,78 +260,131 @@ int main(void)
     if (!fstat) { perror("Statistics.txt"); exit(EXIT_FAILURE); }
     write_stats_header(fstat, N_sim);
 
-    /* scratch buffer for C(r) at one selected snapshot, one simulation */
-    double *C_r_scratch = calloc(half_l + 1, sizeof(double));
-
     /* =====================================================================
-     * Main simulation loop: one simulation at a time.
+     * Main simulation loop, parallelized over the N_sim independent
+     * simulations.  Each gs[i] carries its own deterministic RNG stream
+     * (seeded per i in the setup loop above), so the result is independent of
+     * the thread schedule up to floating-point summation order in the
+     * reductions.  Each thread keeps private scratch + private accumulators
+     * and sums them into the shared arrays under one critical section.
+     *
+     * NB: sim_wall_sec[] now measures per-sim wall time UNDER CONTENTION
+     * (several sims run at once), so timing_stats.txt is no longer a clean
+     * per-sim cost; sim_n_events and all physics outputs are unaffected.
      * ===================================================================== */
     printf("Running %d simulations...\n", N_sim);
+#ifdef _OPENMP
+    printf("  OpenMP: %d threads\n", omp_get_max_threads());
+#endif
 
-    /* Track index into t_sel array so we know when to record full C(r). */
-    int t_sel_cursor = 0;
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
+    {
+        /* Per-thread scratch. */
+        double *spin_hist   = malloc(Mac_T * sizeof(double));
+        double *C_r_scratch = calloc(half_l + 1, sizeof(double));
 
-    for (int i = 0; i < N_sim; i++) {
-        double t_start = now_seconds();
-        t_sel_cursor = 0; /* reset for each simulation */
+        /* Per-thread accumulators (reduced into the shared arrays below). */
+        double *mean_spin_sum_t  = calloc(Mac_T, sizeof(double));
+        double *mean_spin_sq_t   = calloc(Mac_T, sizeof(double));
+        double *corr_pair_sum_t  = calloc(Mac_T, sizeof(double));
+        double *corr_pair_sq_t   = calloc(Mac_T, sizeof(double));
+        double *C_r_sel_t        = calloc((size_t)n_tsel * (half_l + 1), sizeof(double));
+        double *autocorr_sum_t   = calloc(Mac_T, sizeof(double));
+        long   *autocorr_count_t = calloc(Mac_T, sizeof(long));
+        StatsAccum sa_t; stats_alloc(&sa_t, l);
 
-        for (int t = 0; t < Mac_T; t++) {
-            double t_macro = (double)(t + 1) * inv_res;
-            istate_advance_to(gs[i], t_macro);
-            istate_to_spins(gs[i], spins_snap[i]);
+#ifdef _OPENMP
+#pragma omp for schedule(dynamic)
+#endif
+        for (int i = 0; i < N_sim; i++) {
+            double t_start = now_seconds();
+            int t_sel_cursor = 0; /* index into t_sel for this simulation */
 
-            /* ---- Scalar observables at every snapshot ---- */
-            double s0 = spins_snap[i][x0];
-            spin_hist[t]      = s0;
-            mean_spin_sum[t] += s0;
-            mean_spin_sq [t] += s0 * s0;
+            for (int t = 0; t < Mac_T; t++) {
+                double t_macro = (double)(t + 1) * inv_res;
+                istate_advance_to(gs[i], t_macro);
+                istate_to_spins(gs[i], spins_snap[i]);
 
-            double sp = (double)spins_snap[i][x1] * spins_snap[i][x2];
-            corr_pair_sum[t] += sp;
-            corr_pair_sq [t] += sp * sp;
+                /* ---- Scalar observables at every snapshot ---- */
+                double s0 = spins_snap[i][x0];
+                spin_hist[t]        = s0;
+                mean_spin_sum_t[t] += s0;
+                mean_spin_sq_t [t] += s0 * s0;
 
-            /* ---- Full C(r,t) at selected snapshots ---- */
-            if (t_sel_cursor < n_tsel && t == t_sel[t_sel_cursor]) {
-                memset(C_r_scratch, 0, (half_l + 1) * sizeof(double));
-                accumulate_C_r(spins_snap[i], l, C_r_scratch);
-                double *dest = C_r_sel + (size_t)t_sel_cursor * (half_l + 1);
-                for (int r = 0; r <= half_l; r++) dest[r] += C_r_scratch[r];
-                t_sel_cursor++;
+                double sp = (double)spins_snap[i][x1] * spins_snap[i][x2];
+                corr_pair_sum_t[t] += sp;
+                corr_pair_sq_t [t] += sp * sp;
+
+                /* ---- Full C(r,t) at selected snapshots ---- */
+                if (t_sel_cursor < n_tsel && t == t_sel[t_sel_cursor]) {
+                    memset(C_r_scratch, 0, (half_l + 1) * sizeof(double));
+                    accumulate_C_r(spins_snap[i], l, C_r_scratch);
+                    double *dest = C_r_sel_t + (size_t)t_sel_cursor * (half_l + 1);
+                    for (int r = 0; r <= half_l; r++) dest[r] += C_r_scratch[r];
+                    t_sel_cursor++;
+                }
+
+                /* ---- Save trajectory for sim 0 (only one thread runs i==0) ---- */
+                if (i == 0) {
+                    static const int marker = -9999;
+                    fwrite(spins_snap[0], sizeof(int), l, fbin);
+                    fwrite(&marker, sizeof(int), 1, fbin);
+                }
+
+                /* ---- Combined iface+spin stats (time-averaged) ---- */
+                stats_accumulate(&sa_t, gs[i], spins_snap[i]);
             }
 
-            /* ---- Save trajectory for sim 0 ---- */
-            if (i == 0) {
-                static const int marker = -9999;
-                fwrite(spins_snap[0], sizeof(int), l, fbin);
-                fwrite(&marker, sizeof(int), 1, fbin);
+            sim_wall_sec[i] = now_seconds() - t_start;
+            sim_n_events[i] = gs[i]->n_events;
+
+            /* ---- Time autocorrelation from this simulation's history ---- */
+            for (int lag = 0; lag < Mac_T; lag++) {
+                int pairs = Mac_T - lag;
+                for (int t = 0; t < pairs; t++)
+                    autocorr_sum_t[lag] += spin_hist[t] * spin_hist[t + lag];
+                autocorr_count_t[lag] += pairs;
             }
 
-            /* ---- Combined iface+spin stats (time-averaged) ---- */
-            stats_accumulate(sa, gs[i], spins_snap[i]);
+            if (i % 50 == 0) {
+#ifdef _OPENMP
+#pragma omp critical
+#endif
+                printf("  sim %4d/%d  wall=%.2fs  events=%ld\n",
+                       i + 1, N_sim, sim_wall_sec[i], sim_n_events[i]);
+            }
         }
 
-        sim_wall_sec[i] = now_seconds() - t_start;
-        sim_n_events[i] = gs[i]->n_events;
-
-        /* ---- Time autocorrelation from this simulation's history ---- */
-        for (int lag = 0; lag < Mac_T; lag++) {
-            int pairs = Mac_T - lag;
-            for (int t = 0; t < pairs; t++)
-                autocorr_sum[lag] += spin_hist[t] * spin_hist[t + lag];
-            autocorr_count[lag] += pairs;
+        /* ---- Reduce per-thread accumulators into the shared arrays ---- */
+#ifdef _OPENMP
+#pragma omp critical
+#endif
+        {
+            for (int t = 0; t < Mac_T; t++) {
+                mean_spin_sum[t]   += mean_spin_sum_t[t];
+                mean_spin_sq [t]   += mean_spin_sq_t [t];
+                corr_pair_sum[t]   += corr_pair_sum_t[t];
+                corr_pair_sq [t]   += corr_pair_sq_t [t];
+                autocorr_sum [t]   += autocorr_sum_t [t];
+                autocorr_count[t]  += autocorr_count_t[t];
+            }
+            for (size_t k = 0; k < (size_t)n_tsel * (half_l + 1); k++)
+                C_r_sel[k] += C_r_sel_t[k];
+            for (int r = 0; r <= l / 2; r++) {
+                sa->spin_corr[r]  += sa_t.spin_corr[r];
+                sa->iface_corr[r] += sa_t.iface_corr[r];
+            }
+            sa->k_sum     += sa_t.k_sum;
+            sa->n_samples += sa_t.n_samples;
         }
 
-        /* ---- Write binary snapshot (all sims at this time are batched
-                 into the binary after the sim loop for memory efficiency,
-                 but we mirror the original format: write one sim at a time
-                 immediately after each time step — so we do it here        */
-        /* Note: to write the same binary format (all sims interleaved per
-                 time step), we need to collect all snaps first.
-                 For N_sim > 1 we write a separate binary per sim instead. */
-
-        if (i % 50 == 0)
-            printf("  sim %4d/%d  wall=%.2fs  events=%ld\n",
-                   i + 1, N_sim, sim_wall_sec[i], sim_n_events[i]);
+        stats_free(&sa_t);
+        free(spin_hist); free(C_r_scratch);
+        free(mean_spin_sum_t); free(mean_spin_sq_t);
+        free(corr_pair_sum_t); free(corr_pair_sq_t);
+        free(C_r_sel_t); free(autocorr_sum_t); free(autocorr_count_t);
     }
 
     /* Write the single combined binary: re-run would be needed to write
@@ -466,9 +528,9 @@ int main(void)
     free(gs); free(spins_init); free(spins_snap);
     free(mean_spin_sum); free(mean_spin_sq);
     free(corr_pair_sum); free(corr_pair_sq);
-    free(C_r_sel); free(C_r_scratch);
+    free(C_r_sel);
     free(sim_wall_sec); free(sim_n_events);
-    free(autocorr_sum); free(autocorr_count); free(spin_hist);
+    free(autocorr_sum); free(autocorr_count);
     free(t_sel); free(t_sel_next);
     stats_free(sa); free(sa);
     if (model->initialization_param) free(model->initialization_param);
