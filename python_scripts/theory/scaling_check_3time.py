@@ -2,13 +2,16 @@
 scaling_check_3time.py
 ======================
 
-!! SUPERSEDED by cont3_final.py (see ../../VERIFICATION.md #1).  The continuum
-!! kernel used below, K = [[H,-H'],[H',-H'']], is the one PRINTED in the paper
-!! (e:Kblock) and is WRONG for the connected k>=3 correlator: it gives an
-!! identically-zero connected 3-point.  The validated complex kernel
-!! K = [[P, i(2H-P-H')],[i(P-2H-H'), P]] lives in cont3_final.py.  Keep this file
-!! only as the discrete-side exact-generator reference; do not trust its
-!! continuum comparison for k>=3.
+!! SUPERSEDED by cont3_final.py (see ../../VERIFICATION.md, R1/R2).  The
+!! continuum kernel used below, K = [[H,-H'],[H',-H'']], is the real block the
+!! paper printed in the theorem BEFORE 2026-06-27 (now e:Kblock, the k=2
+!! covariance only) and is WRONG for k>=3: with the real prefactor used here it
+!! gives a nonzero, WRONG-SIGNED 3-point (ratio -1.63 to the validated value at
+!! config A of cont3_final); with the correct (-i/2)^k prefactor it gives zero.
+!! The validated complex kernel K = [[P, i(2H-P-H')],[i(P-2H-H'), P]] lives in
+!! cont3_final.py.  Keep this file only as the discrete-side exact-generator
+!! reference; its k>=3 continuum functions RAISE unless allow_wrong_k3=True
+!! (gate [5] of run_checks.py checks both the sign error and the guard).
 
 Does the THREE-time interface correlator obey the scaling limit predicted by
 Theorem 1.11(ii) of glauber_paper.tex?  Two things to check:
@@ -149,13 +152,26 @@ def Kblock(z, tau, L=None, nimg=6):
     return np.array([[H, -H1], [H1, -H2]])
 
 
-def cont_interface_cumulant(points, L=None):
+def cont_interface_cumulant(points, L=None, allow_wrong_k3=False):
     """Connected k-point interface correlator (k=2 or 3) of the continuum field:
         kappa_k = -(-1/2)^k * Pf(A),
     A the 2k x 2k block-antisymmetric matrix with off-diagonal blocks
     K(x_i - x_j, |tau_i - tau_j|) (i<j) and zero diagonal blocks.
-    Anchored so that k=2 gives f (validated in main)."""
+    Anchored so that k=2 gives f (validated in main).
+
+    !! k >= 3 IS WRONG (see the module header): the real block cannot produce the
+    odd-k functions, and taking Pf of the real matrix with a real prefactor
+    silently returns a plausible but wrong-signed number rather than the zero
+    that the correct (-i/2)^k prefactor would give.  Use
+    cont3_final.fk(points, Kcont) instead.  Guarded so that the mistake cannot be
+    made silently a third time; pass allow_wrong_k3=True only to reproduce this
+    file's own historical output."""
     k = len(points)
+    if k >= 3 and not allow_wrong_k3:
+        raise RuntimeError(
+            "scaling_check_3time.cont_interface_cumulant is WRONG for k>=3 "
+            "(real kernel; wrong-signed). Use cont3_final.fk(points, Kcont), or "
+            "box_fk for the box average. Pass allow_wrong_k3=True to override.")
     A = np.zeros((2 * k, 2 * k))
     for i in range(k):
         for j in range(i + 1, k):
@@ -167,11 +183,21 @@ def cont_interface_cumulant(points, L=None):
     return -((-0.5) ** k) * pf
 
 
-def cont_box_cumulant(centers, taus, h, L=None, nq=7):
+def cont_box_cumulant(centers, taus, h, L=None, nq=7, allow_wrong_k3=False):
     """Box-averaged continuum two-triangles: average f_k over a width-h box in
     EACH spatial argument (uniform per position), matching the box observable
-    eta_box = (1/h) int_box eta.  centers/taus length k (=2 or 3)."""
+    eta_box = (1/h) int_box eta.  centers/taus length k (=2 or 3).
+
+    !! k >= 3 IS WRONG -- see cont_interface_cumulant.  Use cont3_final.box_fk."""
     k = len(centers)
+    if k >= 3 and not allow_wrong_k3:
+        raise RuntimeError(
+            "scaling_check_3time.cont_box_cumulant is WRONG for k>=3 (real "
+            "kernel; wrong-signed). Use cont3_final.box_fk. Pass "
+            "allow_wrong_k3=True to override.")
+    if k not in (2, 3):
+        raise ValueError("cont_box_cumulant implements k=2,3 only (hard-coded "
+                         "loops); cont3_final.box_fk handles any k")
     s = (np.arange(nq) + 0.5) / nq * h - h / 2.0      # uniform box samples
     acc = 0.0; cnt = 0
     if k == 2:
@@ -187,7 +213,8 @@ def cont_box_cumulant(centers, taus, h, L=None, nq=7):
                     acc += cont_interface_cumulant(
                         [(centers[0] + s0, taus[0]),
                          (centers[1] + s1, taus[1]),
-                         (centers[2] + s2, taus[2])], L=L)
+                         (centers[2] + s2, taus[2])], L=L,
+                        allow_wrong_k3=allow_wrong_k3)
                     cnt += 1
     return acc / cnt
 
@@ -256,7 +283,9 @@ def main():
             xs = [c / N for c in centers]
             bx = [(c, w, N * N * tau) for c, tau in zip(centers, cfg['taus'])]
             disc = N ** 3 * m.box_cumulant(bx)
-            cont = cont_box_cumulant(xs, cfg['taus'], hN, L=L_RING)
+            # allow_wrong_k3: this file's own historical (superseded) output
+            cont = cont_box_cumulant(xs, cfg['taus'], hN, L=L_RING,
+                                     allow_wrong_k3=True)
             vals.append((1.0 / N, disc, cont))
             print(f"   {N:>3} {hN:>6.3f} {disc:>13.4e} {cont:>13.4e} {disc/cont:>8.3f}")
         inv = np.array([v[0] for v in vals]); dd = np.array([v[1] for v in vals])

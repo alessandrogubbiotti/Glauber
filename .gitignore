@@ -49,3 +49,46 @@ core
 #.vscode/
 #.idea/
 
+
+# ---- added 2026-09-04: keep source, exclude generated data ----
+# Monte Carlo output directories (regenerable from the C engine + config_*.txt)
+results_*/
+box_corr_*/
+campaign_eq/
+campaign_eq2/
+pilot_*/
+grid_T05/
+probe_T08/
+shards_T08/
+kymo/
+study/
+if_val_N100/
+persistence_test/
+validation_finiteN/
+runB_stationary/
+
+# Compiled engine binaries (rebuild with compile*.sh)
+/Glauber
+/Gillespie
+/Corr2pt
+/BoxCorr
+/Persistence
+
+# Python bytecode / venv
+__pycache__/
+*.pyc
+glauber_env/
+
+# LaTeX build artefacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.out
+*.toc
+*.bbl
+*.blg
+pdflatex*.fls
+
+# macOS
+.DS_Store

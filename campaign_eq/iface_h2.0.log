@@ -1,0 +1,17 @@
+=== Box-magnetization correlation (C engine, independent ensembles) ===
+  N=200 L=4 l=800 nu=1  gamma=0.999950 eta=0.990050 p=0.004975
+  ann=1.999950001 create=4.999875003e-05  (closing rates, hop 1/dir)
+  box h=2 -> w=200 (401 sites)  reference site 400 (x=L/2)
+  observable: interface memory f  (N^2 * connected eta_box correlator)
+  M=21 space pts  K=4 times  nsims=50000 per point  seed=304
+  => 84 independent ensembles (4200000 trajectories total)
+  OpenMP: 8 threads
+  21/84 grid points done
+  42/84 grid points done
+  63/84 grid points done
+  84/84 grid points done
+Wrote campaign_eq/iface_h2.0/box_corr.txt
+Wrote campaign_eq/iface_h2.0/configuration.json
+
+Overlay the exact theory with:
+  python3 python_scripts/mc_box_correlation.py --plot-only campaign_eq/iface_h2.0

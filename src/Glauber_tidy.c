@@ -31,12 +31,45 @@ typedef struct {
 } Parameters_update;
 
 void free_parameters_update(Parameters_update *par) {
-    free(par->rng);
+    gsl_rng_free(par->rng);
     free(par);
+}
+
+/* Seed source.  A fixed seed via $GLAUBER_SEED makes a run reproducible (used
+ * when this engine is the reference implementation in a comparison); otherwise
+ * draw a fresh one, so that repeated runs give INDEPENDENT statistics.  Same
+ * convention as $GILLESPIE_SEED in gillespie_main.c. */
+static unsigned long read_base_seed(void) {
+    const char *env = getenv("GLAUBER_SEED");
+    if (env && *env) {
+        unsigned long s = strtoul(env, NULL, 10);
+        if (s) return s;
+    }
+    unsigned long seed = 0;
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (f) {
+        if (fread(&seed, sizeof(seed), 1, f) != 1) seed = 0;
+        fclose(f);
+    }
+    if (!seed) seed = (unsigned long)time(NULL);
+    return seed;
 }
 
 void set_parameters(const ModelConfig *conf, Parameters_update *parameters) {
     parameters->l = conf->L * conf->N;
+
+    /* The parity update splits the ring into the even and the odd sublattice,
+     * so that no two ADJACENT sites are ever updated in the same half-pass.
+     * On an odd ring sites l-1 and 0 share a parity while being neighbours,
+     * which re-opens the simultaneous-adjacent-flip hole the scheme exists to
+     * close (it would create/destroy interface pairs spuriously). */
+    if (parameters->l % 2 != 0) {
+        fprintf(stderr,
+                "set_parameters: L*N = %d is ODD; the parity update requires an "
+                "even ring (choose L or N even).\n", parameters->l);
+        exit(EXIT_FAILURE);
+    }
+
     parameters->prob_movement    = 1 - exp(-1.0 / conf->Micro_n_steps);
     parameters->prob_annihilation = 1 - exp(-(double)conf->annihilation / conf->Micro_n_steps);
     parameters->prob_creation     = 1 - exp(-(double)conf->creation     / conf->Micro_n_steps);
@@ -54,6 +87,16 @@ void set_parameters(const ModelConfig *conf, Parameters_update *parameters) {
     gsl_rng_env_setup();
     G = gsl_rng_mt19937;
     parameters->rng = gsl_rng_alloc(G);
+
+    /* Seed BOTH generators explicitly: gsl_rng drives the dynamics, and C
+     * rand() drives the spin initialisation in initialize_spins_*.  Without
+     * this both start from their fixed default seeds, so every run of this
+     * binary reproduces the previous one bit for bit -- repeated runs would
+     * add no statistics at all.  The seed is printed so a run can be repeated. */
+    unsigned long seed = read_base_seed();
+    gsl_rng_set(parameters->rng, seed);
+    srand((unsigned int)(seed & 0xFFFFFFFFu));
+    printf("Seed: %lu   (set $GLAUBER_SEED to reproduce this run)\n", seed);
 }
 
 
@@ -305,9 +348,14 @@ int main(void) {
         fprintf(Statistics, "%lf\t", (double)t / (double)model->resolution);
         for (int i = 0; i < model->N_simulations; i++) {
             Glauber_update_parity(spins_aux[i], new_spins[i], parameters, a);
+            /* All four observables are read from spins[i] = the state at the
+             * time written in this row's first column.  new_spins[i] already
+             * holds the NEXT frame (the update above ran first), so measuring
+             * the ageing correlator there would shift it by one frame,
+             * i.e. report C(t + 1/resolution, 0) under the label t. */
             corr[i]              = correlation(spins[i], spins[i], corr_par);
             magnetization[i]     = compute_magnetization(spins[i], par_av_magnetization);
-            time_delayed_corr[i] = correlation(first_spins[i], new_spins[i], time_delayed_corr_par);
+            time_delayed_corr[i] = correlation(first_spins[i], spins[i], time_delayed_corr_par);
             interfaces[i]        = n_interfaces(spins[i], parameters->l);
         }
         print_spins_to_file_binary2(data, output, length);
