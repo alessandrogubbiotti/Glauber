@@ -34,17 +34,19 @@ campaigns, noted as such.
 cleanup adversarially reviewed (5 independent lenses, 36 verified findings —
 all addressed, see R5); MC campaigns not re-run.*
 
-> **⚠️ Reproducibility — untracked files.** Of the 13 files in the import
-> closure of the gate scripts, **only `run_checks.py` and
-> `scaling_check_3time.py` are tracked by git**. A fresh checkout of this
-> branch cannot run a single gate. The untracked files are:
-> `python_scripts/theory/{cont3_final, dual_multitime_check, ff_engine,
-> ff_extract_check, ff_scale, glauber_exact_ring, k4_zerodiag_check,
-> multitime_interface_dpp, pfaffian_verify}.py` and
-> `python_scripts/{theory_continuum, theory_glauber}.py`
-> (`paper_kernel_check.py` and `freefermion_largeN.py` are untracked too).
-> Until they are added, the "verified" table below is reproducible only on
-> this machine.
+> **Reproducibility.** The whole import closure of the gate scripts is tracked
+> (this was not true before 2026-09-04, when only `run_checks.py` and
+> `scaling_check_3time.py` were). Verified by cloning the branch into an empty
+> directory and running `run_checks.py` there: **14/14 gates pass, exit 0**.
+> Dependencies are in `requirements.txt` (`mpmath` is needed only by
+> `droplet_lifetime_check.py`).
+>
+> Deliberately **not** tracked, and so reproducible only on the machine that
+> produced them: the Monte-Carlo output directories (`campaign_eq*/`,
+> `results_*/`, `grid_T05/`, `probe_T08/`, `persistence_test/`, …). Only their
+> small `.log` files are kept, recording the parameters each grid was run with.
+> Re-deriving a published χ² therefore means re-running the campaign, not just
+> re-reading a file — see ⚠️ 3.
 
 ---
 
