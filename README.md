@@ -5,7 +5,17 @@ This repository simulates the **1-dimensional Glauber–Ising dynamics** in its
 correlators against **exact closed-form theory**. The mathematical conventions
 are those of Section 1 of the paper.
 
-For the rendered documentation, see the [📄 GitHub Pages site](https://alessandrogubbiotti.github.io/Glauber/).
+---
+
+## 🔹 Pages
+
+For a rendered version of the project documentation, see the [📄 GitHub Pages site](https://alessandrogubbiotti.github.io/Glauber/):
+
+- [The sticky Brownian motion](https://alessandrogubbiotti.github.io/Glauber/sticky.html), the simpler case;
+- [The three regimes](https://alessandrogubbiotti.github.io/Glauber/regimes.html) of the Glauber dynamics;
+- [The model](https://alessandrogubbiotti.github.io/Glauber/model.html);
+- [The Gillespie algorithm](https://alessandrogubbiotti.github.io/Glauber/engine.html);
+- [The programs](https://alessandrogubbiotti.github.io/Glauber/programs.html).
 
 ---
 
@@ -107,6 +117,9 @@ bash compile_corr2pt.sh        # ./Corr2pt    (finite-N correlators)
 `G_n`, `iface_corr2pt_multi.txt` for `H_n`, `corr_eqtime_multi.txt` for the
 single-time `C_n`) and then calls the theory overlay.
 
+The sticky Brownian motion is a submodule, `Sticky-Brownian-Motion`. Clone with
+`git clone --recurse-submodules`, or run `git submodule update --init`.
+
 ---
 
 ## 🔹 Exact theory and verification
@@ -138,4 +151,12 @@ of particles is Poisson and the positions are uniform. Started from it (`./Corr2
 ... equilibrium`), the equal-time correlator stays at `eta^|n|` for all `T`
 (stationarity).
 
-![simulation image](docs/images/simulation_32.png)
+---
+
+## 🔹 The three regimes
+
+A trajectory for the annihilation rate of order `N^a`, with `a = -0.5`, `-1`
+and `-1.5`, from the same initial configuration. See the
+[page](https://alessandrogubbiotti.github.io/Glauber/regimes.html).
+
+![The three regimes](docs/images/dynamics_comparison.png)
