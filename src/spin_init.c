@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <gsl/gsl_randist.h>
 
-/* Initialization functions shared between Glauber_tidy and Gillespie binaries.
+/* Initialization functions of the Gillespie binaries.
  * Declared in configuration.h (forward declarations). */
 
 void initialize_spins_1(int *spins, int l, void *params) {
@@ -48,7 +48,7 @@ void initialize_spins_5(int *spins, int l, void *params) {
  * O(1/l) (~5% of the correlator at l=48), which is not stationary for the
  * dynamics and does not match the analytic formulas.
  *
- * rand()-based variant (used by Glauber_tidy via the init_function table); it
+ * rand()-based variant (chosen with init_function=6 in config.txt); it
  * uses full-config rejection.  GSL-driven binaries should call
  * sample_equilibrium_interfaces(), which samples the same measure the faster
  * "particle" way (Binomial count + uniform placement). */

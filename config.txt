@@ -29,18 +29,6 @@ slowdown_exponent=0.0
 # creation=8.888888e-05
 
 resolution=100
-Micro_n_steps=200
 N_simulations=500
 init_function=1
 init_param=0.006667
-
-A1_magnetization=2
-B1_magnetization=3
-A1_corr=2
-A2_corr=2.5
-B1_corr=3
-B2_corr=3.5
-A1_time_delayed_corr=2
-A2_time_delayed_corr=2
-B1_time_delayed_corr=2.0125
-B2_time_delayed_corr=2.0125

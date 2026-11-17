@@ -8,7 +8,6 @@ gcc -O2 -fopenmp \
     src/interface_state.c \
     src/spin_init.c \
     src/configuration.c \
-    src/configuration_statistics.c \
     -o Corr2pt \
     -I src/ -I"${GSL_INC}" \
     -L"${GSL_LIB}" -lgsl -lgslcblas -lm \

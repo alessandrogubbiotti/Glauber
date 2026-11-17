@@ -13,7 +13,6 @@ gcc -O2 -g -fopenmp \
     src/interface_stats.c \
     src/spin_init.c \
     src/configuration.c \
-    src/configuration_statistics.c \
     -o Gillespie \
     -I src/ \
     -I"${GSL_INC}" \

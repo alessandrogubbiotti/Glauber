@@ -14,7 +14,6 @@
 #endif
 
 #include "configuration.h"
-#include "configuration_statistics.h"
 #include "interface_state.h"
 #include "interface_stats.h"
 

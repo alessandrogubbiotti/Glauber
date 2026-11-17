@@ -63,7 +63,7 @@ typedef struct {
 /* Function names automatically decay to function pointers.
  * Equivalent to: conf->initialize = &initialize_spins_5;
  */
-// Forward declarations for initialization functions defined in Glauber_tidy.c
+// Forward declarations for initialization functions defined in spin_init.c
 void initialize_spins_1(int *spins, int l, void *params);
 void initialize_spins_2(int *spins, int l, void *params);
 void initialize_spins_3(int *spins, int l, void *params);
