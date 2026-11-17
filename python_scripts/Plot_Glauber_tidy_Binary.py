@@ -51,13 +51,15 @@ def load_binary_spin_data(path, n_simulations, l, n_time_steps):
 
 def plot_simulation(sim_data, sim_index, outdir, T, L, N, n_micro_evolution,
                     creation_rate, annihilation_rate, resolution):
-    params_text = (
-        f"N = {N}\n"
-        f"Time discretization of\nmicroscopic dynamics = {n_micro_evolution}\n"
-        f"Creation rate = {creation_rate}\n"
-        f"Annihilation rate = {annihilation_rate}\n"
-        f"Resolution = {resolution}"
-    )
+    lines = [f"N = {N}"]
+    if n_micro_evolution:   # only the time-stepping engine had one; Gillespie has no time step
+        lines.append(f"Time discretization of\nmicroscopic dynamics = {n_micro_evolution}")
+    lines += [
+        f"Creation rate = {creation_rate}",
+        f"Annihilation rate = {annihilation_rate}",
+        f"Resolution = {resolution}",
+    ]
+    params_text = "\n".join(lines)
 
     n_time_steps, l = sim_data.shape
     extent = (0, L, 0, T)
@@ -99,7 +101,7 @@ def main():
     n_simulations = config["N_simulations"]
     N = config["N"]
     L = config["L"]
-    Micro_n_steps = config["Micro_n_steps"]
+    Micro_n_steps = config.get("Micro_n_steps", 0)
     creation = config.get("creation", config.get("Micro_Creation_Rate"))
     annihilation = config.get("annihilation", config.get("Micro_Annihilation_Rate"))
     resolution = config["resolution"]
