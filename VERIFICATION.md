@@ -141,9 +141,10 @@ and k=3. What is missing is the **limit** at k≥4: that N⁴×(centered / cycle
 sum) converges to the corresponding `e:Kpf`-block Pfaffian objects.
 - **Motivation:** the paper asserts an all-orders Pfaffian point field; only
   the first two non-trivial orders of the *limit* are tested.
-- **Plan:** `NUMERICS_PROGRAM.md` carries a sharpened, costed plan (centered
-  route avoids the catastrophic cancellation; geometry with a dominant 2+2
-  product term).
+- **Plan:** `NUMERICS_PROGRAM.md` (not on `main`: it is on the branch
+  `verification/scaling-limit-checks`) carries a sharpened, costed plan
+  (centered route avoids the catastrophic cancellation; geometry with a
+  dominant 2+2 product term).
 
 ### 2. **Regime-family probes (`ss:numregimes`) are PLANNED, not run**
 The paper text itself says *"The planned probes are…"*. Only single
