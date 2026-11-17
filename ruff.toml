@@ -11,6 +11,9 @@
 # script does, and the docstrings are well formed (quotes, indentation, no
 # empty ones).
 
+# The submodule is another repository: it is not checked here.
+extend-exclude = ["Sticky-Brownian-Motion"]
+
 [lint]
 select = ["D"]  # pydocstyle
 ignore = [
