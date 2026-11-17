@@ -1,20 +1,30 @@
 """
 plot_corr_comparison.py  —  3-panel comparison of G_n(T) for sub/crit/super.
-Usage:  python3 python_scripts/plot_corr_comparison.py
+Usage:  python3 python_scripts/plot_corr_comparison.py [SUPER CRIT SUB [OUT.png]]
+Reads corr2pt_multi.txt from three results directories of Corr2pt, one per
+regime (a = -0.5, a = -1, a = -1.5, in this order).  Without arguments the
+directories are the three N=150 ones below, with the equilibrium start.
 Saves:  corr_comparison.png in the Glauber root.
 """
 
-import os, re
+import os, re, sys
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 DIRS = [
-    ("results_N150_T4.0_L4_Ann0.08_create3.63e-06_corr2pt", r"Supercritical  ($a = -0.5$)"),
-    ("results_N150_T4.0_L4_Ann0.01_create2.96e-07_corr2pt", r"Critical  ($a = -1$)"),
-    ("results_N150_T4.0_L4_Ann0.00_create2.42e-08_corr2pt", r"Subcritical  ($a = -1.5$)"),
+    ("results_N150_nu1.00_L4_equilibrium_Ann0.08_create3.63e-06_corr2pt", r"Supercritical  ($a = -0.5$)"),
+    ("results_N150_nu1.00_L4_equilibrium_Ann0.01_create2.96e-07_corr2pt", r"Critical  ($a = -1$)"),
+    ("results_N150_nu1.00_L4_equilibrium_Ann0.00_create2.42e-08_corr2pt", r"Subcritical  ($a = -1.5$)"),
 ]
+out = "corr_comparison.png"
+
+# The three directories, and the name of the figure, can be given on the command line.
+if len(sys.argv) >= 4:
+    DIRS = [(d, title) for d, (_, title) in zip(sys.argv[1:4], DIRS)]
+if len(sys.argv) >= 5:
+    out = sys.argv[4]
 
 def load(outdir):
     path = os.path.join(outdir, "corr2pt_multi.txt")
@@ -51,6 +61,5 @@ for ax, (ddir, title) in zip(axes, DIRS):
 
 axes[0].set_ylabel(r"$G_n(T)$", fontsize=12)
 
-out = "corr_comparison.png"
 fig.savefig(out, dpi=160, bbox_inches="tight")
 print(f"Saved {out}")

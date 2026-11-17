@@ -2,13 +2,16 @@
 plot_dynamics.py  —  space-time kymograph for subcritical / critical / supercritical.
 
 Usage:
-    python3 python_scripts/plot_dynamics.py
+    python3 python_scripts/plot_dynamics.py [SUPER CRIT SUB [OUT.png]]
 
-Reads trajectory/spins_output.bin from the three N=150 regime directories
-and saves dynamics_comparison.png in the Glauber root.
+Reads trajectory/spins_output.bin from three results directories of Gillespie,
+one per regime (a = -0.5, a = -1, a = -1.5, in this order), and saves the three
+pictures side by side.  Without arguments the directories are the three
+N=150, T=4 ones below and the figure is dynamics_comparison.png in the Glauber
+root.
 """
 
-import os, json
+import os, json, sys
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -20,6 +23,13 @@ DIRS = [
     ("results_N150_T4.0_L4_Ann0.01_create2.96e-07_gillespie", "Critical  ($a = -1$)"),
     ("results_N150_T4.0_L4_Ann0.00_create2.42e-08_gillespie", "Subcritical  ($a = -1.5$)"),
 ]
+out = "dynamics_comparison.png"
+
+# The three directories, and the name of the figure, can be given on the command line.
+if len(sys.argv) >= 4:
+    DIRS = [(d, title) for d, (_, title) in zip(sys.argv[1:4], DIRS)]
+if len(sys.argv) >= 5:
+    out = sys.argv[4]
 
 MARKER = -9999
 
@@ -44,11 +54,11 @@ cmap = ListedColormap(["#2166ac", "#d73027"])   # blue = −1, red = +1
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True,
                          gridspec_kw={"wspace": 0.04})
-fig.suptitle("Interface dynamics — Glauber model, $N=150$", fontsize=14, y=1.01)
 
 for ax, (results_dir, title) in zip(axes, DIRS):
     traj_dir = os.path.join(results_dir, "trajectory")
     frames, T, L, N, res = load_traj(traj_dir)     # (Mac_T, l)
+    fig.suptitle(f"Interface dynamics — Glauber model, $N={N}$", fontsize=14, y=1.01)
 
     im = ax.imshow(
         frames,
@@ -66,8 +76,7 @@ axes[0].set_ylabel("Macroscopic time $t$", fontsize=11)
 # colorbar to the right of last axis only
 cbar = fig.colorbar(im, ax=axes[-1], orientation="vertical",
                     fraction=0.046, pad=0.04, ticks=[-1, 1], shrink=0.85)
-cbar.ax.set_yticklabels(["$\sigma = -1$", "$\sigma = +1$"], fontsize=10)
+cbar.ax.set_yticklabels([r"$\sigma = -1$", r"$\sigma = +1$"], fontsize=10)
 
-out = "dynamics_comparison.png"
 fig.savefig(out, dpi=180, bbox_inches="tight")
 print(f"Saved {out}")
