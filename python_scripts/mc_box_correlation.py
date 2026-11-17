@@ -90,8 +90,8 @@ def equilibrium_ic(l, p, rng):
 
 def evolve_to(sigma, u_target, la, lc, lm, Lidx, Ridx, rng):
     """Continuous-time spin-flip dynamics at the glauber rates (code units):
-       flip rate of site i = 1 - (gamma/2) sigma_i(sigma_{i-1}+sigma_{i+1})
-         = 1+gamma (lone dissenter), 1 (wall), 1-gamma (aligned bulk)."""
+    flip rate of site i = 1 - (gamma/2) sigma_i(sigma_{i-1}+sigma_{i+1})
+      = 1+gamma (lone dissenter), 1 (wall), 1-gamma (aligned bulk)."""
     l = sigma.size
     u = 0.0
     while u < u_target:

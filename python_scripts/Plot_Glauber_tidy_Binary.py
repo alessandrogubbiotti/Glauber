@@ -1,3 +1,14 @@
+"""Plot_Glauber_tidy_Binary.py — the space-time picture of the spins.
+
+Reads from a results folder configuration.json and spins_output.bin (at every
+saved time the spins of each simulation as 32-bit integers, then the marker
+-9999) and saves simulation_<i>.png for each simulation: space on the
+horizontal axis, time on the vertical one, the colour is the spin.
+
+Gillespie saves the trajectory of its first simulation in <results>/trajectory:
+
+    python3 python_scripts/Plot_Glauber_tidy_Binary.py <results>/trajectory
+"""
 import os
 import numpy as np
 import matplotlib.pyplot as plt

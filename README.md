@@ -125,6 +125,10 @@ single-time `C_n`) and then calls the theory overlay.
 python python_scripts/theory/run_checks.py
 ```
 
+The docstrings are checked automatically at every push on `main`: every script
+must start with a docstring that says what it does. To run the check by hand:
+`ruff check` (the rules are in [`ruff.toml`](ruff.toml)).
+
 ---
 
 ## 🔹 Invariant measure

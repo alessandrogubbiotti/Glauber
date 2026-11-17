@@ -1,0 +1,24 @@
+# The automatic checker for docstrings.
+#
+# Run it from the root of the repository with
+#
+#     ruff check
+#
+# GitHub runs it at every push and pull request on main
+# (.github/workflows/docstrings.yml).
+#
+# What it asks: every Python script starts with a docstring that says what the
+# script does, and the docstrings are well formed (quotes, indentation, no
+# empty ones).
+
+[lint]
+select = ["D"]  # pydocstyle
+ignore = [
+    # Not asked yet: a docstring on every class, method and function.
+    # 134 of them have none today. Remove this line when they are written.
+    "D101", "D102", "D103", "D105", "D106", "D107",
+    # The layout and the wording of the first line are left free.
+    "D204", "D205", "D209", "D212", "D213", "D400", "D401", "D402", "D403", "D415",
+    # Incompatible with D211.
+    "D203",
+]
