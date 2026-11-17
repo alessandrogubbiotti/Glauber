@@ -3,7 +3,7 @@
 This repository simulates the **1-dimensional Glauber–Ising dynamics** in its
 **interface (particle) picture** and compares the finite-`N` Monte-Carlo
 correlators against **exact closed-form theory**. The mathematical conventions
-are fixed in [`docs/section1.pdf`](docs/section1.pdf) (Section 1 of the paper).
+are those of Section 1 of the paper.
 
 For the rendered documentation, see the [📄 GitHub Pages site](https://alessandrogubbiotti.github.io/Glauber/).
 
@@ -117,11 +117,12 @@ single-time `C_n`) and then calls the theory overlay.
 - [`python_scripts/plot_theory_vs_mc.py`](python_scripts/plot_theory_vs_mc.py) —
   reads a results directory, overlays theory vs MC for each `T`, and prints a
   `chi^2/dof` per curve.
-- [`tests/test_theory.py`](tests/test_theory.py) — checks the single-time
-  Bessel-addition identity to `1e-12` and the interface plateau `H_n -> p^2`.
+- [`python_scripts/theory/run_checks.py`](python_scripts/theory/run_checks.py) —
+  the fourteen checks listed in [`VERIFICATION.md`](VERIFICATION.md); the exit
+  code is 0 if all of them pass.
 
 ```bash
-python tests/test_theory.py            # or: pytest tests/
+python python_scripts/theory/run_checks.py
 ```
 
 ---

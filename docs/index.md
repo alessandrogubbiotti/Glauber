@@ -8,7 +8,7 @@ title:  Interfaces parametrized by (N, annihilation, creation)
 This repository simulates the one–dimensional Glauber–Ising dynamics in its
 **interface (particle) picture** and compares the finite-$N$ Monte-Carlo
 correlators with **exact closed-form theory**. The mathematical conventions are
-fixed in [Section 1 of the paper](section1.pdf) and are summarised below.
+those of Section 1 of the paper and are summarised below.
 
 ---
 
@@ -107,8 +107,8 @@ implements the closed-form correlators on $\mathbb Z$ and on the finite ring
 quench correlator; time-delayed interface correlator; exact finite-ring two-time
 correlator). [`python_scripts/plot_theory_vs_mc.py`](https://github.com/alessandrogubbiotti/Glauber)
 overlays them on the Monte-Carlo output of `./Corr2pt` and prints a $\chi^2/\text{dof}$
-per curve. The single-time identity (thesis double-Bessel form $=$ Henkel form)
-and the interface plateau $H_n\to p^2$ are checked in `tests/test_theory.py`.
+per curve. The fourteen checks listed in `VERIFICATION.md` are run by
+`python_scripts/theory/run_checks.py`.
 
 Example simulation output:
 
@@ -120,4 +120,4 @@ Example simulation output:
 
 For source code and further details, visit the
 [GitHub repository](https://github.com/alessandrogubbiotti/Glauber).
-The full conventions are in [docs/section1.pdf](section1.pdf).
+The full conventions are in Section 1 of the paper.
