@@ -64,7 +64,7 @@ $$
 
 In the limit, at a large time, the correlation of the colours of two sites at distance $d$ is $e^{-\sqrt{2\lambda}\,d} = e^{-2\nu d}$, and the interfaces have density $\sqrt{\lambda/2} = \nu$. On the ring of length $L$ the density is $\sqrt{\lambda/2}\tanh(L\sqrt{\lambda/2})$: it is the one of the line when the ring is long.
 
-A genealogy moves by one site at each step, so it stays on the sites of one parity: the two sublattices carry two independent copies of the model. The program simulates one of them, and a row has $NL/2$ sites.
+A genealogy moves by one site at each step, so along it the parity of the site plus the step is constant: the points of the two parities never meet, and they carry two independent copies of the model. The program simulates one of them, and a row has $NL/2$ sites.
 
 ```bash
 git submodule update --init      # if the repository was cloned without --recurse-submodules
