@@ -62,7 +62,7 @@ $$
 \lambda = 2\nu^2, \qquad t = 2\tau.
 $$
 
-In the limit, at a large time, the correlation of the colours of two sites at distance $d$ is $e^{-\sqrt{2\lambda}\,d} = e^{-2\nu d}$, and the interfaces have density $\sqrt{\lambda/2} = \nu$.
+In the limit, at a large time, the correlation of the colours of two sites at distance $d$ is $e^{-\sqrt{2\lambda}\,d} = e^{-2\nu d}$, and the interfaces have density $\sqrt{\lambda/2} = \nu$. On the ring of length $L$ the density is $\sqrt{\lambda/2}\tanh(L\sqrt{\lambda/2})$: it is the one of the line when the ring is long.
 
 A genealogy moves by one site at each step, so it stays on the sites of one parity: the two sublattices carry two independent copies of the model. The program simulates one of them, and a row has $NL/2$ sites.
 
@@ -110,13 +110,13 @@ init_param=0.5
 
 ## 🔹 The Check
 
-On the lattice of the program, at a large time, the correlation of the colours of two sites of a row at the distance of $j$ sites is $r^j$, where
+On the lattice of the program, at a large time and on a long ring, the correlation of the colours of two sites of a row at the distance of $j$ sites is $r^j$, where
 
 $$
 r = \frac{(2-s)-2\sqrt{1-s}}{s},\qquad s = \Big(1-\frac{\lambda}{N^2}\Big)^2,
 $$
 
-and the density of the interfaces is $N(1-r)/4$. The program prints the density of the interfaces, averaged over the second half of the run.
+and the density of the interfaces is $N(1-r)/4$. The program prints the density of the interfaces, averaged over the second half of the run, next to its limit.
 
 - **With $N = 100$, $L = 200$, $\lambda = 2$**, up to the time $6$, ten runs give $0.985 \pm 0.007$. On the lattice it is $0.980$, and in the limit $1$.
 
