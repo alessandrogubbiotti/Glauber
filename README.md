@@ -16,6 +16,7 @@ For a rendered version of the project documentation, see the [📄 GitHub Pages 
 - [The model](https://alessandrogubbiotti.github.io/Glauber/model.html);
 - [The Gillespie algorithm](https://alessandrogubbiotti.github.io/Glauber/engine.html);
 - [The Pfaffian kernel](https://alessandrogubbiotti.github.io/Glauber/pfaffian.html), and its comparison with the simulation;
+- [The noisy voter model](https://alessandrogubbiotti.github.io/Glauber/voter.html), the Glauber dynamics read as a voter model;
 - [The programs](https://alessandrogubbiotti.github.io/Glauber/programs.html).
 
 ---
@@ -120,7 +121,8 @@ bash compile_pfaffian.sh       # ./Pfaffian   (the kernel of the interfaces)
 `G_n`, `iface_corr2pt_multi.txt` for `H_n`, `corr_eqtime_multi.txt` for the
 single-time `C_n`) and then calls the theory overlay.
 
-The sticky Brownian motion is a submodule, `Sticky-Brownian-Motion`. Clone with
+The sticky Brownian motion and the noisy voter model are submodules,
+`Sticky-Brownian-Motion` and `Continuum-Noisy-Voter-Model`. Clone with
 `git clone --recurse-submodules`, or run `git submodule update --init`.
 
 ---

@@ -20,7 +20,8 @@ The dynamics of the interfaces is simulated with the Gillespie algorithm, and th
 3. [The model](model.html): the rates, the invariant measure, the rate modes, the time dictionary.
 4. [The Gillespie algorithm](engine.html): how the dynamics is simulated.
 5. [The Pfaffian kernel](pfaffian.html): the correlation functions of the interfaces as Pfaffians, on the lattice and in the limit, and the comparison with the simulation.
-6. [The programs](programs.html): how to compile and run them, the files they write, the scripts, the checks.
+6. [The noisy voter model](voter.html): the Glauber dynamics read as a voter model with marks, its program, and the two dynamics side by side.
+7. [The programs](programs.html): how to compile and run them, the files they write, the scripts, the checks.
 
 ---
 

@@ -30,7 +30,7 @@ GSL_INC=/usr/local/include GSL_LIB=/usr/local/lib bash compile_gillespie.sh
 
 They compile with `-fopenmp`, and the simulations of an ensemble run on several threads (`OMP_NUM_THREADS`). With a compiler without OpenMP, remove `-fopenmp` from the script: the programs run on one thread.
 
-The sticky Brownian motion is a submodule, see [its page](sticky.html):
+The sticky Brownian motion and the noisy voter model are submodules, see [the sticky Brownian motion](sticky.html) and [the noisy voter model](voter.html):
 
 ```bash
 git clone --recurse-submodules https://github.com/alessandrogubbiotti/Glauber.git
@@ -183,6 +183,7 @@ They are in `python_scripts`, and each one starts with a docstring that says wha
 - **The three regimes:** `plot_dynamics.py`, `plot_corr_comparison.py`, see [the three regimes](regimes.html).
 - **The output of `BoxCorr`:** `mc_box_correlation.py --plot-only <dir>` overlays the exact formula; `validate_iface.py` for the interfaces; `plot_box_vary_h.py` draws one picture for each width; `combine_passes.py` and `combine_shards.py` put together runs with different seeds; `analyze_nsim_h.py` and `chi2_torus_compare.py` compute the $\chi^2$ against the formulas.
 - **The output of `Pfaffian`:** `plot_pfaffian_comparison.py`.
+- **The noisy voter model:** `plot_voter_comparison.py` draws the output of its program next to a trajectory of `Gillespie`.
 - **The formulas:** `theory_glauber.py` on the lattice, `theory_continuum.py` in the limit, `pfaffian_kernel.py` for the Pfaffian kernel, on the lattice and in the limit.
 - **The checks of the paper:** the directory `theory`.
 
