@@ -28,16 +28,16 @@ Indeed, with $n$ neighbours of the opposite sign the spin flips at rate $\gamma 
 
 So the value of a spin is found by following its **genealogy** backwards in time: a random walk that jumps to each neighbour with rate $\gamma$, until the first mark. The genealogies of two spins are independent until they meet, and then they are the same.
 
-With $\gamma = (N^2-\nu^2)/(N^2+\nu^2)$, in a unit of macroscopic time a genealogy has variance $2$ and meets the marks at rate $4\nu^2$.
+With $\gamma = (N^2-\nu^2)/(N^2+\nu^2)$, in a unit of macroscopic time a genealogy has variance $2\gamma$ and meets the marks at rate $2N^2(1-\gamma)$: in the limit, variance $2$ and rate $4\nu^2$.
 
 ---
 
 ## 🔹 The Limit
 
-From every point a backward Brownian path starts, and this path is marked with a Poisson rate. The colour of a point is the one of the first mark met by its path: this is the **continuum noisy voter model**. From each mark two Brownian paths start, forward in time: those are the interfaces, and they annihilate when they meet.
+From every point a backward Brownian path starts, of variance $2$ in a unit of macroscopic time, and this path is marked by a Poisson process of rate $4\nu^2$. The colour of a point is the one of the first mark met by its path: this is the **continuum noisy voter model**. From each mark two Brownian paths start, forward in time. When the mark changes the colour, which has probability $1/2$, they are two interfaces. The interfaces annihilate when they meet.
 
-- **At a fixed time** the colours are the stationary two-state Markov chain with flip rate $\nu$, whose discontinuities form a Poisson process of intensity $\nu$.
-- **The correlation in time** is
+- **At a fixed time**, for the dynamics started from the invariant measure, the colours are the stationary two-state Markov chain with flip rate $\nu$, whose discontinuities form a Poisson process of intensity $\nu$. From independent spins, as in the pictures below, this holds in the limit of a large time.
+- **The correlation in time**, also from the invariant measure, is
 
   $$
   \lim_{N\to\infty}\langle\sigma_0(0)\,\sigma_{\lfloor Nu\rfloor/N}(N^2\tau)\rangle
@@ -62,7 +62,7 @@ $$
 \lambda = 2\nu^2, \qquad t = 2\tau.
 $$
 
-In the limit, at a large time, the correlation of the colours of two sites at distance $d$ is $e^{-\sqrt{2\lambda}\,d} = e^{-2\nu d}$, and the interfaces have density $\sqrt{\lambda/2} = \nu$. On the ring of length $L$ the density is $\sqrt{\lambda/2}\tanh(L\sqrt{\lambda/2})$: it is the one of the line when the ring is long.
+In the limit, at a large time and on the line, the correlation of the colours of two sites at distance $d$ is $e^{-\sqrt{2\lambda}\,d} = e^{-2\nu d}$, and the interfaces have density $\sqrt{\lambda/2} = \nu$. On the ring of length $L$ the density is $\sqrt{\lambda/2}\tanh(L\sqrt{\lambda/2})$: it is the one of the line when the ring is long.
 
 A genealogy moves by one site at each step, so along it the parity of the site plus the step is constant: the points of the two parities never meet, and they carry two independent copies of the model. The program simulates one of them, and a row has $NL/2$ sites.
 
@@ -72,6 +72,7 @@ cd Continuum-Noisy-Voter-Model
 cc nvm_sim.c -o nvm_sim -lgsl -lgslcblas -lm
 ./nvm_sim                        # writes output.txt and output.pgm
 python3 plot.py                  # writes output.png
+cd ..
 ```
 
 The parameters $N$, $L$, $T$, $\lambda$, the number of saved rows in a unit of time and the seed are the `#define` at the top of `nvm_sim.c`, and they can be given at compile time, as below.
@@ -118,9 +119,12 @@ $$
 
 and the density of the interfaces is $N(1-r)/4$. The program prints the density of the interfaces, averaged over the second half of the run, next to its limit.
 
-- **With $N = 100$, $L = 200$, $\lambda = 2$**, up to the time $6$, ten runs give $0.985 \pm 0.007$. On the lattice it is $0.980$, and in the limit $1$.
+- **With $N = 100$, $L = 200$, $\lambda = 2$**, up to the time $6$, ten runs give $0.985 \pm 0.007$. On the lattice it is $0.980$, and in the limit $1$. The seed is given at compile time, so the program is compiled once for each seed, from $1$ to $10$.
 
 ```bash
-cc -DN=100 -DL=200 -DT=6 -DLAMBDA=2 -DSEED=1 nvm_sim.c -o nvm_sim -lgsl -lgslcblas -lm
-./nvm_sim                        # once for each seed, from 1 to 10
+cd Continuum-Noisy-Voter-Model
+for s in 1 2 3 4 5 6 7 8 9 10; do
+    cc -DN=100 -DL=200 -DT=6 -DLAMBDA=2 -DSEED=$s nvm_sim.c -o nvm_sim -lgsl -lgslcblas -lm
+    ./nvm_sim
+done
 ```
