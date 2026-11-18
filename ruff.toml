@@ -11,8 +11,8 @@
 # script does, and the docstrings are well formed (quotes, indentation, no
 # empty ones).
 
-# The submodule is another repository: it is not checked here.
-extend-exclude = ["Sticky-Brownian-Motion"]
+# The submodules are other repositories: they are not checked here.
+extend-exclude = ["Sticky-Brownian-Motion", "Continuum-Noisy-Voter-Model"]
 
 [lint]
 select = ["D"]  # pydocstyle

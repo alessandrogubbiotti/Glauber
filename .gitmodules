@@ -1,3 +1,6 @@
 [submodule "Sticky-Brownian-Motion"]
 	path = Sticky-Brownian-Motion
 	url = https://github.com/alessandrogubbiotti/Sticky-Brownian-Motion.git
+[submodule "Continuum-Noisy-Voter-Model"]
+	path = Continuum-Noisy-Voter-Model
+	url = https://github.com/alessandrogubbiotti/Continuum-Noisy-Voter-Model-.git
