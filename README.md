@@ -15,6 +15,7 @@ For a rendered version of the project documentation, see the [📄 GitHub Pages 
 - [The three regimes](https://alessandrogubbiotti.github.io/Glauber/regimes.html) of the Glauber dynamics;
 - [The model](https://alessandrogubbiotti.github.io/Glauber/model.html);
 - [The Gillespie algorithm](https://alessandrogubbiotti.github.io/Glauber/engine.html);
+- [The Pfaffian kernel](https://alessandrogubbiotti.github.io/Glauber/pfaffian.html), and its comparison with the simulation;
 - [The programs](https://alessandrogubbiotti.github.io/Glauber/programs.html).
 
 ---
@@ -108,9 +109,11 @@ t_formula = 2 * N^2 * tau.
 ```bash
 bash compile_gillespie.sh      # ./Gillespie  (trajectories, statistics)
 bash compile_corr2pt.sh        # ./Corr2pt    (finite-N correlators)
+bash compile_pfaffian.sh       # ./Pfaffian   (the kernel of the interfaces)
 
 ./Corr2pt config.txt 2000 equilibrium   # G_n, H_n  (reversible start)
 ./Corr2pt config.txt 2000 disordered    # C_n       (quench start)
+./Pfaffian --nu 1 --nuprime 3           # the kernel after a quench from nu' to nu
 ```
 
 `./Corr2pt` writes one tidy file per observable (`corr2pt_multi.txt` for
@@ -133,6 +136,14 @@ The sticky Brownian motion is a submodule, `Sticky-Brownian-Motion`. Clone with
 - [`python_scripts/theory/run_checks.py`](python_scripts/theory/run_checks.py) —
   the fourteen checks listed in [`VERIFICATION.md`](VERIFICATION.md); the exit
   code is 0 if all of them pass.
+- [`python_scripts/pfaffian_kernel.py`](python_scripts/pfaffian_kernel.py) —
+  the Pfaffian kernel of the interfaces, at one and at several times, on the
+  lattice and in the limit, for independent interfaces of intensity `nu'` at
+  time 0. Its checks are
+  [`python_scripts/theory/pfaffian_kernel_check.py`](python_scripts/theory/pfaffian_kernel_check.py).
+- [`python_scripts/plot_pfaffian_comparison.py`](python_scripts/plot_pfaffian_comparison.py) —
+  reads the output of `./Pfaffian` and compares the estimated kernel and
+  correlation functions with the exact ones on the lattice and with the limit.
 
 ```bash
 python python_scripts/theory/run_checks.py

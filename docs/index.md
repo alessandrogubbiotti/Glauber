@@ -19,7 +19,8 @@ The dynamics of the interfaces is simulated with the Gillespie algorithm, and th
 2. [The three regimes](regimes.html): the same three regimes for the interfaces of the Glauber dynamics.
 3. [The model](model.html): the rates, the invariant measure, the rate modes, the time dictionary.
 4. [The Gillespie algorithm](engine.html): how the dynamics is simulated.
-5. [The programs](programs.html): how to compile and run them, the files they write, the scripts, the checks.
+5. [The Pfaffian kernel](pfaffian.html): the correlation functions of the interfaces as Pfaffians, on the lattice and in the limit, and the comparison with the simulation.
+6. [The programs](programs.html): how to compile and run them, the files they write, the scripts, the checks.
 
 ---
 

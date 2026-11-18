@@ -7,7 +7,7 @@ title: The Gillespie Algorithm
 
 # The Gillespie Algorithm
 
-The dynamics is simulated event by event, in continuous time, with no time step. The engine is [`src/interface_state.c`](https://github.com/alessandrogubbiotti/Glauber/blob/main/src/interface_state.c), and the three programs of [the programs page](programs.html) are built on it.
+The dynamics is simulated event by event, in continuous time, with no time step. The engine is [`src/interface_state.c`](https://github.com/alessandrogubbiotti/Glauber/blob/main/src/interface_state.c), and the programs of [the programs page](programs.html) are built on it.
 
 ---
 

@@ -7,7 +7,7 @@ title: The Programs
 
 # The Programs
 
-There are three programs, built on [the Gillespie engine](engine.html): `Gillespie` for the trajectories and the statistics of an ensemble, `Corr2pt` for the correlations in time on the lattice, `BoxCorr` for the correlations of the box averages. The Python scripts draw the outputs and compare them with the exact formulas.
+There are four programs, built on [the Gillespie engine](engine.html): `Gillespie` for the trajectories and the statistics of an ensemble, `Corr2pt` for the correlations in time on the lattice, `BoxCorr` for the correlations of the box averages, `Pfaffian` for the kernel and the correlation functions of the interfaces. The Python scripts draw the outputs and compare them with the exact formulas.
 
 ---
 
@@ -19,6 +19,7 @@ The programs need a C compiler and the **GSL**. The scripts need Python with the
 bash compile_gillespie.sh      # ./Gillespie
 bash compile_corr2pt.sh        # ./Corr2pt
 bash compile_box_corr.sh       # ./BoxCorr
+bash compile_pfaffian.sh       # ./Pfaffian
 ```
 
 The compile scripts look for the GSL in `/usr/include` and `/usr/lib64`. Another place is given with `GSL_INC` and `GSL_LIB`:
@@ -59,7 +60,7 @@ A line is `key=value`, and a line that starts with `#` is a comment. The keys th
   6. The invariant measure: an interface on each bond independently with probability `init_param`, conditioned to an even number of interfaces. Put `init_param` equal to $\nu/(N+\nu)$.
 - **`init_param`**: the parameter of the initial configuration.
 
-`Gillespie` reads all the keys. `Corr2pt` reads `N`, `L`, `nu` and the rates. `BoxCorr` does not read the file: its parameters are on the command line.
+`Gillespie` reads all the keys. `Corr2pt` reads `N`, `L`, `nu` and the rates. `BoxCorr` and `Pfaffian` do not read the file: their parameters are on the command line.
 
 ---
 
@@ -140,6 +141,38 @@ The output, for each width, is `<out>/h<h>/box_corr.txt`, with $x$ and, for each
 
 ---
 
+## 🔹 Pfaffian
+
+```bash
+./Pfaffian [--N 100] [--L 8] [--nu 1.0] [--nuprime 3.0]
+           [--T 0.01,0.03,0.1] [--R 1.5] [--bin 5] [--ndens 40]
+           [--nsims 2000] [--seed 0] [--out pfaffian_mc]
+```
+
+The interfaces start independent, one on each bond with probability $$\nu'/(N+\nu')$$, conditioned to an even number, where $$\nu'$$ is `--nuprime`, and evolve with the `glauber` rates of intensity $\nu$. With `--nuprime` equal to `--nu` the start is the invariant measure, and with `--nuprime` equal to `--N` the spins are independent. At every time of `--T` the program estimates the four entries of the rescaled kernel, the two-point function $\rho_2$ and the three-point function $\rho_3$ of the interfaces; for every pair of times of `--T` the two-point function at two times; and the density $\rho_1$ on a grid of `--ndens` steps, up to the largest time. The formulas of the estimates are in [the Pfaffian kernel](pfaffian.html).
+
+The estimates are averages over the translations and over the `nsims` simulations, and the standard errors are computed over the simulations. The distances go up to `--R`, in macroscopic units, and are grouped in bins of `--bin` bonds: the bin $j$ contains the distances from $j\cdot\text{bin}+1$ to $(j+1)\cdot\text{bin}$ bonds. `--R` has to be smaller than $L/2$, and the two gaps of $\rho_3$ go up to half of it. The times of `--T` are at most $16$; they enter the names of the files, so they have to differ in their first six digits. The seed is `--seed`; without it one is drawn and written in `configuration.json`. The simulations of a run have all different seeds, and the files do not depend on the number of threads.
+
+$\rho_2$, $\rho_3$, $\mathbf K_{22}$ and the two-point function at two times are counts of pairs and of triples of interfaces. With few of them in a bin, some tens, the standard error of the bin is not reliable: take wider bins or more simulations.
+
+The output is in the directory `--out`:
+
+- **`density.txt`**: the time, $\rho_1$ and its standard error.
+- **`kernel_T<tau>.txt`**: for each bin, the first and the last distance in bonds, the mean distance $d$, then $\mathbf K_{11}$, $\mathbf K_{12}$, $\mathbf K_{21}$, $\mathbf K_{22}$ and $\rho_2$, each with its standard error.
+- **`rho3_T<tau>.txt`**: for each pair of bins of the two gaps, $\rho_3$ and its standard error.
+- **`twotime_S<sigma>_T<tau>.txt`**: $\rho(\sigma,0;\tau,d)$, for the displacement $0$ and then for each bin of its absolute value.
+- **`configuration.json`**.
+
+The comparison with the exact values is drawn by
+
+```bash
+python3 python_scripts/plot_pfaffian_comparison.py <out> [OUT.png]
+```
+
+that prints also a $\chi^2$ per point for each observable.
+
+---
+
 ## 🔹 The Scripts
 
 They are in `python_scripts`, and each one starts with a docstring that says what it does and how it is called.
@@ -149,7 +182,8 @@ They are in `python_scripts`, and each one starts with a docstring that says wha
 - **The output of `Corr2pt`:** `plot_theory_vs_mc.py`, `plot_time_delayed_corr.py`.
 - **The three regimes:** `plot_dynamics.py`, `plot_corr_comparison.py`, see [the three regimes](regimes.html).
 - **The output of `BoxCorr`:** `mc_box_correlation.py --plot-only <dir>` overlays the exact formula; `validate_iface.py` for the interfaces; `plot_box_vary_h.py` draws one picture for each width; `combine_passes.py` and `combine_shards.py` put together runs with different seeds; `analyze_nsim_h.py` and `chi2_torus_compare.py` compute the $\chi^2$ against the formulas.
-- **The formulas:** `theory_glauber.py` on the lattice, `theory_continuum.py` in the limit.
+- **The output of `Pfaffian`:** `plot_pfaffian_comparison.py`.
+- **The formulas:** `theory_glauber.py` on the lattice, `theory_continuum.py` in the limit, `pfaffian_kernel.py` for the Pfaffian kernel, on the lattice and in the limit.
 - **The checks of the paper:** the directory `theory`.
 
 `plot_corr2pt.py` reads a file of an earlier version of `Corr2pt`.
@@ -163,6 +197,12 @@ python python_scripts/theory/run_checks.py
 ```
 
 These are the fourteen checks of the formulas of the paper, and the exit code is $0$ if all of them pass. The file [`VERIFICATION.md`](https://github.com/alessandrogubbiotti/Glauber/blob/main/VERIFICATION.md) says, for each claim of the paper, which script verifies it and with which result, and what is still open.
+
+```bash
+python3 python_scripts/theory/pfaffian_kernel_check.py
+```
+
+These are the checks of `pfaffian_kernel.py`, see [the Pfaffian kernel](pfaffian.html).
 
 ```bash
 ruff check
