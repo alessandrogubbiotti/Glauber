@@ -36,8 +36,8 @@ With $\gamma = (N^2-\nu^2)/(N^2+\nu^2)$, in a unit of macroscopic time a genealo
 
 From every point a backward Brownian path starts, of variance $2$ in a unit of macroscopic time, and this path is marked by a Poisson process of rate $4\nu^2$. The colour of a point is the one of the first mark met by its path: this is the **continuum noisy voter model**. From each mark two Brownian paths start, forward in time. When the mark changes the colour, which has probability $1/2$, they are two interfaces. The interfaces annihilate when they meet.
 
-- **At a fixed time**, for the dynamics started from the invariant measure, the colours are the stationary two-state Markov chain with flip rate $\nu$, whose discontinuities form a Poisson process of intensity $\nu$. From independent spins, as in the pictures below, this holds in the limit of a large time.
-- **The correlation in time**, also from the invariant measure, is
+- **At a fixed time**, on the line and for the dynamics started from the invariant measure, the colours are the stationary two-state Markov chain with flip rate $\nu$, whose discontinuities form a Poisson process of intensity $\nu$. On the ring the Poisson process is conditioned to have an even number of points. From independent spins, as in the pictures below, this holds in the limit of a large time.
+- **The correlation in time**, also on the line and from the invariant measure, is
 
   $$
   \lim_{N\to\infty}\langle\sigma_0(0)\,\sigma_{\lfloor Nu\rfloor/N}(N^2\tau)\rangle
@@ -56,7 +56,7 @@ From every point a backward Brownian path starts, of variance $2$ in a unit of m
 - **is marked** with probability $\lambda/N^2$, and takes a new colour;
 - otherwise **takes the colour** that one of its two neighbours, the left or the right one with probability $1/2$, had at the step before.
 
-A unit of time is $N^2$ steps, so a genealogy has variance $1$ in a unit of time and meets the marks at rate $\lambda$. With respect to the Glauber dynamics the time is doubled:
+A unit of time is $N^2$ steps, so a genealogy has variance $1$ in a unit of time and meets the marks at rate $\lambda$. With $t$ the time of the program and $\tau$ the macroscopic time of the Glauber dynamics, the time is doubled:
 
 $$
 \lambda = 2\nu^2, \qquad t = 2\tau.
@@ -66,14 +66,18 @@ In the limit, at a large time and on the line, the correlation of the colours of
 
 A genealogy moves by one site at each step, so along it the parity of the site plus the step is constant: the points of the two parities never meet, and they carry two independent copies of the model. The program simulates one of them, and a row has $NL/2$ sites.
 
+The first command is needed if the repository was cloned without `--recurse-submodules`.
+
 ```bash
-git submodule update --init      # if the repository was cloned without --recurse-submodules
+git submodule update --init
 cd Continuum-Noisy-Voter-Model
 cc nvm_sim.c -o nvm_sim -lgsl -lgslcblas -lm
 ./nvm_sim                        # writes output.txt and output.pgm
 python3 plot.py                  # writes output.png
 cd ..
 ```
+
+With the default parameters the ring has less than one interface on average, so the density that the program prints for one run can be far from the limit next to it: the check below uses a long ring.
 
 The parameters $N$, $L$, $T$, $\lambda$, the number of saved rows in a unit of time and the seed are the `#define` at the top of `nvm_sim.c`, and they can be given at compile time, as below.
 

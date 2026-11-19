@@ -8,8 +8,8 @@ whose trajectory/ is read.  The two space-time pictures are drawn side by side
 with the same colours.
 
 The time of the noisy voter model is divided by 2: its genealogies have variance
-1 in a unit of time and the ones of the Glauber dynamics have variance 2.  With
-lambda = 2 nu^2 the two dynamics have then the same limit.
+1 in a unit of time and the ones of the Glauber dynamics have variance 2 gamma,
+in the limit 2.  With lambda = 2 nu^2 the two dynamics have then the same limit.
 
 A row is drawn as a band centred at its time.  The first row of nvm_sim is the
 time 0; the first frame of Gillespie is the time 1/resolution, the time 0 is not
