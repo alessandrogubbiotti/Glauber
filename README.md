@@ -107,14 +107,20 @@ t_formula = 2 * N^2 * tau.
 
 ## 🔹 Building and running
 
-```bash
-bash compile_gillespie.sh      # ./Gillespie  (trajectories, statistics)
-bash compile_corr2pt.sh        # ./Corr2pt    (finite-N correlators)
-bash compile_pfaffian.sh       # ./Pfaffian   (the kernel of the interfaces)
+The three scripts build `./Gillespie` (trajectories, statistics), `./Corr2pt`
+(finite-N correlators) and `./Pfaffian` (the kernel of the interfaces).
+`equilibrium` is the reversible start and gives `G_n`, `H_n`; `disordered` is
+the quench start and gives `C_n`; the last command is the kernel after a
+quench from `nu'` to `nu`.
 
-./Corr2pt config.txt 2000 equilibrium   # G_n, H_n  (reversible start)
-./Corr2pt config.txt 2000 disordered    # C_n       (quench start)
-./Pfaffian --nu 1 --nuprime 3           # the kernel after a quench from nu' to nu
+```bash
+bash compile_gillespie.sh
+bash compile_corr2pt.sh
+bash compile_pfaffian.sh
+
+./Corr2pt config.txt 2000 equilibrium
+./Corr2pt config.txt 2000 disordered
+./Pfaffian --nu 1 --nuprime 3
 ```
 
 `./Corr2pt` writes one tidy file per observable (`corr2pt_multi.txt` for

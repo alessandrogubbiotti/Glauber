@@ -89,10 +89,10 @@ A sample trajectory for each case, with $N = 300$, up to the rescaled time $10$.
 
 ## 🔹 The Program
 
-The chain is simulated with the **Gillespie algorithm**: the time of the next jump is exponential with parameter the sum of the rates out of the current state, and the jump is chosen with probability proportional to its rate. The parameters $N$, $T$, $a$ and the seed are the `#define` at the top of `sticky.c`.
+The chain is simulated with the **Gillespie algorithm**: the time of the next jump is exponential with parameter the sum of the rates out of the current state, and the jump is chosen with probability proportional to its rate. The parameters $N$, $T$, $a$ and the seed are the `#define` at the top of `sticky.c`. The first command is needed if the repository was cloned without `--recurse-submodules`.
 
 ```bash
-git submodule update --init      # if the repository was cloned without --recurse-submodules
+git submodule update --init
 cd Sticky-Brownian-Motion
 cc sticky.c -o sticky -lm
 ./sticky                         # writes trajectory.dat: rescaled time, rescaled position
