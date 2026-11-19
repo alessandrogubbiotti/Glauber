@@ -73,9 +73,9 @@ for ax, (results_dir, title) in zip(axes, DIRS):
 
 axes[0].set_ylabel("Macroscopic time $t$", fontsize=11)
 
-# colorbar to the right of last axis only
-cbar = fig.colorbar(im, ax=axes[-1], orientation="vertical",
-                    fraction=0.046, pad=0.04, ticks=[-1, 1], shrink=0.85)
+# The colorbar takes its room from the three panels, so that they have the same width.
+cbar = fig.colorbar(im, ax=axes, orientation="vertical",
+                    fraction=0.015, pad=0.013, ticks=[-1, 1], shrink=0.85)
 cbar.ax.set_yticklabels([r"$\sigma = -1$", r"$\sigma = +1$"], fontsize=10)
 
 fig.savefig(out, dpi=180, bbox_inches="tight")
