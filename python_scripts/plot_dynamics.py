@@ -54,8 +54,9 @@ def load_traj(traj_dir):
 
 cmap = ListedColormap(["#2166ac", "#d73027"])   # blue = −1, red = +1
 
+# The gap leaves room for the labels 4.0 and 0.0 of two neighbouring panels.
 fig, axes = plt.subplots(1, 3, figsize=(15, 5), sharey=True,
-                         gridspec_kw={"wspace": 0.04})
+                         gridspec_kw={"wspace": 0.1})
 
 for ax, (results_dir, title) in zip(axes, DIRS):
     traj_dir = os.path.join(results_dir, "trajectory")
