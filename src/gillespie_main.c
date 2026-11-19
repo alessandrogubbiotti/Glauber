@@ -150,7 +150,9 @@ int main(void)
 
     int    l       = model->N * model->L;
     int    N_sim   = model->N_simulations;
-    int    Mac_T   = (int)(model->T * model->resolution);
+    /* The frames are the ones of the times j/resolution not after T. The factor
+       is for the rounding of T: 0.29 * 100 is 28.999999999999996. */
+    int    Mac_T   = (int)floor(model->T * model->resolution * (1.0 + 1e-12));
     double inv_res = 1.0 / model->resolution;
     int    half_l  = l / 2;
 

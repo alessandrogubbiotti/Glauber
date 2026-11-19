@@ -44,7 +44,9 @@ def load_glauber(results_dir):
     trajectory = os.path.join(results_dir, "trajectory")
     with open(os.path.join(trajectory, "configuration.json")) as f:
         cfg = json.load(f)
-    l, frames = cfg["N"] * cfg["L"], int(cfg["T"] * cfg["resolution"])
+    # The frames are the ones of the times j/resolution not after T; the factor is for the
+    # rounding of T, as in gillespie_main.c: 0.29 * 100 is 28.999999999999996.
+    l, frames = cfg["N"] * cfg["L"], int(np.floor(cfg["T"] * cfg["resolution"] * (1.0 + 1e-12)))
     raw = np.fromfile(os.path.join(trajectory, "spins_output.bin"), dtype=np.int32)
     if len(raw) != frames * (l + 1) or np.any(raw.reshape(frames, l + 1)[:, l] != MARKER):
         raise ValueError(f"{trajectory}: spins_output.bin is not the one of configuration.json")

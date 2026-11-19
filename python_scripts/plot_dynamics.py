@@ -40,7 +40,9 @@ def load_traj(traj_dir):
         cfg = json.load(f)
     T, N, L, res = cfg["T"], cfg["N"], cfg["L"], cfg["resolution"]
     l = N * L
-    Mac_T = int(T * res)
+    # The frames are the ones of the times j/res not after T; the factor is for the
+    # rounding of T, as in gillespie_main.c: 0.29 * 100 is 28.999999999999996.
+    Mac_T = int(np.floor(T * res * (1.0 + 1e-12)))
     raw = np.fromfile(spins_path, dtype=np.int32)
     expected = Mac_T * (l + 1)
     if len(raw) != expected:

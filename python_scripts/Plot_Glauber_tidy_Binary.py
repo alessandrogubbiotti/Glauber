@@ -107,7 +107,9 @@ def main():
     resolution = config["resolution"]
 
     l = N * L
-    total_time_steps = int(resolution * T)
+    # The frames are the ones of the times j/resolution not after T; the factor is for the
+    # rounding of T, as in gillespie_main.c: 0.29 * 100 is 28.999999999999996.
+    total_time_steps = int(np.floor(resolution * T * (1.0 + 1e-12)))
 
     spins = load_binary_spin_data(spins_path, n_simulations, l, total_time_steps)
     print("spins shape:", spins.shape)
